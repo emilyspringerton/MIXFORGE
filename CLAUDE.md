@@ -11,12 +11,15 @@ only), and the phased plan.
 
 ## Status
 
-New repo (2026-09-03), NORTHSTAR only. `legacy.txt` is the real source conversation (a captured
-AI chat transcript that reached a real, concrete C++/JUCE/Essentia/RubberBand/yt-dlp design,
-explicitly rejected here in favor of PARENA — see `NORTHSTAR.md`'s own stack-decision table).
-No code written yet — Phase 1 (YouTube import + track library, the transcript's own real first
-feature) is the actual starting point, not Phase 0's `media/audio` work, since Phase 1 only
-needs `stdlib/shell.prn` (already real) plus a sqlite FFI binding.
+`legacy.txt` is the real source conversation (a captured AI chat transcript that reached a real,
+concrete C++/JUCE/Essentia/RubberBand/yt-dlp design, explicitly rejected here in favor of PARENA
+— see `NORTHSTAR.md`'s own stack-decision table). **Real V0 code shipped 2026-09-03 (S243-01)**:
+`PARENA/stdlib/mixforge/import.prn` — paste a YouTube URL (plus an optional instrumental URL),
+shells out to real `yt-dlp` via `process/run-capture`, real layered shell-injection defense,
+live-verified (`make test-mixforge-import` in PARENA). Still open, honestly named: no CLI entry
+point exists yet in this repo itself (the `.prn` library function is real and tested, nothing
+calls it from a real `main.c` today), and metadata lands as NDJSON rather than a queryable
+SQLite store — see `NORTHSTAR.md`'s own "In scope (V0)" section for the exact remaining slice.
 
 ## Real, current dependency (checked directly, not assumed)
 

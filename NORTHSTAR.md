@@ -78,15 +78,28 @@ Two real gaps, of different sizes:
 ## Scope
 
 ### In scope (V0)
-- The transcript's own explicitly-first feature: paste a YouTube URL (plus an optional second
-  URL for the instrumental) and have it land in a real local track library. Real download via
-  `stdlib/shell.prn` invoking the real `yt-dlp` binary — no reimplementation of YouTube's own
-  extraction logic, same "shell out to a real, maintained tool" judgment the legacy
-  conversation's own yt-dlp choice already made, just executed through PARENA's real shell
-  primitive instead of C++.
-- A real local track library: metadata (title, artist, duration; BPM/key deferred to Phase 3)
-  in a real SQLite-backed store, files organized under `tracks/main/`/`tracks/instrumental/`
-  matching the transcript's own real layout.
+- **Shipped 2026-09-03 (S243-01)**: the transcript's own explicitly-first feature, paste a
+  YouTube URL (plus an optional second URL for the instrumental) and have it land in a real
+  local track library. `PARENA/stdlib/mixforge/import.prn` — real download via
+  `stdlib/process.prn`'s `run-capture` shelling out to the real `yt-dlp` binary (this file
+  ended up using `process.prn`, not `shell.prn`, once written — `run-capture`'s own real
+  synchronous "run + capture stdout + real exit code" shape is what this needs; `shell.prn`
+  itself is for spawning an interactive PTY shell, a different real primitive). Real, layered
+  shell-injection defense (`safe-youtube-url?` narrow allowlist + `log/projector.prn`'s proven
+  `shell-single-quote`), live-verified via `make test-mixforge-import` (stubbed yt-dlp, real
+  injection-payload rejections, real Ok/Err propagation). Metadata is written as a real NDJSON
+  line per import, not a real SQLite row yet — see the file's own header comment for why (the
+  SQLite/`sql/driver` half of "a real local track library" below is still open).
+- Still open: querying the NDJSON metadata log as a real local track library (a
+  `project-sqlite!`-style projector, once MixForge actually needs to query it — same real,
+  already-proven "flat log first, DB projector later" shape `log/projector.prn` establishes
+  elsewhere), and organizing downloaded files under `tracks/main/`/`tracks/instrumental/`
+  directories at the CLI-wiring layer (`import-track` itself takes any caller-supplied
+  directories — creating/choosing the real default directories is the next, thin wiring step,
+  not done yet since MIXFORGE has no `main.c`/CLI entry point at all today).
+- Two-deck playback + crossfade once Phase 0 (`media/audio`/`codec`) lands — the same V0 bar
+  the pre-legacy-transcript draft of this document already set, now sequenced correctly after
+  the library/import feature the transcript itself said comes first.
 - Two-deck playback + crossfade once Phase 0 (`media/audio`/`codec`) lands — the same V0 bar
   the pre-legacy-transcript draft of this document already set, now sequenced correctly after
   the library/import feature the transcript itself said comes first.

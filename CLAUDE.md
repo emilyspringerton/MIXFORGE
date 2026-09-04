@@ -16,10 +16,15 @@ concrete C++/JUCE/Essentia/RubberBand/yt-dlp design, explicitly rejected here in
 — see `NORTHSTAR.md`'s own stack-decision table). **Real V0 code shipped 2026-09-03 (S243-01)**:
 `PARENA/stdlib/mixforge/import.prn` — paste a YouTube URL (plus an optional instrumental URL),
 shells out to real `yt-dlp` via `process/run-capture`, real layered shell-injection defense,
-live-verified (`make test-mixforge-import` in PARENA). Still open, honestly named: no CLI entry
-point exists yet in this repo itself (the `.prn` library function is real and tested, nothing
-calls it from a real `main.c` today), and metadata lands as NDJSON rather than a queryable
-SQLite store — see `NORTHSTAR.md`'s own "In scope (V0)" section for the exact remaining slice.
+live-verified (`make test-mixforge-import` in PARENA). **Real CLI shipped 2026-09-04
+(MF-CORE-12441)**: `src/main.c`, this repo's own first real code — `mixforge import <url>
+[instrumental-url]`, creates the real `tracks/main/`/`tracks/instrumental/` directories, calls
+the real, generated `import_track` (committed at `generated/mixforge_gen.c`), and appends a real
+NDJSON line to `tracks/library.ndjson`. Live-verified with the same yt-dlp-stub technique
+`test_mixforge_import.c` established. Still open, honestly named: metadata lands as NDJSON
+rather than a queryable SQLite store, and playback/crossfade + key/BPM detection are both
+blocked on real, separate PARENA-side stdlib work that doesn't exist yet — see `NORTHSTAR.md`'s
+own "In scope (V0)" section for the exact remaining slice.
 
 ## Real, current dependency (checked directly, not assumed)
 

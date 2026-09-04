@@ -1,5 +1,31 @@
 # Changelog
 
+## 2026-09-04
+
+- MF-CORE-12441 ("mixforge iterate on the core product"): **this repo's own first real code**,
+  `src/main.c` -- a real CLI host, closing the exact gap this repo's own `CLAUDE.md`/`NORTHSTAR.md`
+  already named honestly ("no CLI entry point exists yet... nothing calls it from a real
+  `main.c` today"). `mixforge import <youtube-url> [instrumental-youtube-url]`: creates the real
+  default `tracks/main/`/`tracks/instrumental/` library directories, calls
+  `PARENA/stdlib/mixforge/import.prn`'s real, already-tested `import-track` (compiled once via
+  `parena build`, generated C committed at `generated/mixforge_gen.c`, same "generate once,
+  commit, call by name" precedent every other real PARENA-mod consumer in this monorepo already
+  uses), and appends a real NDJSON metadata line to `tracks/library.ndjson` (`track-metadata-json`
+  -- real, existed since S243-01, but wasn't exported until this same pass, so nothing could
+  reach it before). Real, found-live build gap fixed along the way: the vendored
+  `parena_runtime.h`'s own `_POSIX_C_SOURCE`/`_DEFAULT_SOURCE` feature-test macros only take
+  effect if no system header has been included yet in the translation unit -- fixed by including
+  the generated `.c` (and therefore the runtime header) first in `main.c`, before any of the
+  host's own `<stdio.h>`/etc includes, same real ordering fix GoblinFoxDragon's own
+  `action_bar_mod_host.h` had to document. Live-verified end to end with the same real
+  yt-dlp-stub technique `PARENA/tests/test_mixforge_import.c` already established: real import
+  (both single-URL and main+instrumental), real directory creation, real NDJSON output, and real
+  rejection (non-zero exit) of a shell-injection-shaped URL. Real, honest, deliberately NOT done:
+  playback/crossfade and key/BPM detection both still need real, separate PARENA-side stdlib work
+  that doesn't exist yet (`media/audio`/`codec`, an `aubio` FFI binding) -- this CLI's only real
+  job is import + local-library bookkeeping, per this repo's own "narrowest real slice first"
+  discipline.
+
 ## 2026-09-03 (2)
 
 - S243-01: real V0 shipped in `PARENA/stdlib/mixforge/import.prn` (this repo's own code is still

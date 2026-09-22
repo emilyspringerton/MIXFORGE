@@ -1,0 +1,15 @@
+{
+  "name": "mixforge-room-server",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "MIXFORGE DJ-room server -- seat occupancy, join/leave, turn broadcast. Authoritative turn-order math delegates to the same PARENA-compiled room.wasm the browser client uses (../web/room.wasm) -- one real source of truth, not a second hand-rolled copy.",
+  "main": "room_server.mjs",
+  "scripts": {
+    "start": "node room_server.mjs",
+    "test": "node room_server_test.mjs"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  }
+}

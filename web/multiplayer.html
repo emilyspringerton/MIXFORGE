@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>MIXFORGE — DJ Room (live, multiplayer)</title>
+<style>
+  body { background: #0b0b12; color: #e8e8f0; font-family: system-ui, sans-serif; padding: 2rem; }
+  h1 { color: #ff5fa2; }
+  .room { display: flex; gap: 1rem; margin-top: 2rem; }
+  .seat { border: 2px solid #333; border-radius: 8px; padding: 1rem; width: 9rem; text-align: center; }
+  .seat.turn { border-color: #ff5fa2; box-shadow: 0 0 12px #ff5fa2; }
+  .seat.me { border-color: #4ade80; }
+  .seat.empty { opacity: 0.35; }
+  input, button { margin-top: 1.5rem; padding: 0.6rem 1rem; font-size: 1rem; }
+  #log { margin-top: 1.5rem; color: #9ad; font-family: monospace; white-space: pre-wrap; }
+</style>
+</head>
+<body>
+<h1>MIXFORGE DJ Room — live server</h1>
+<p>Open this page in several tabs to see real, separate seats join the same room. Connects to
+<code>ws://127.0.0.1:8973</code> (run <code>node server/room_server.mjs</code> first). Turn-order
+and seat validity are computed by the real, same <code>room.wasm</code> the server itself calls
+&mdash; this page never reimplements that logic.</p>
+
+<div class="room" id="room"></div>
+<div>
+  <input id="url" type="text" placeholder="https://youtu.be/..." size="40">
+  <button id="queue">Queue song (only works on your turn)</button>
+</div>
+<div id="log"></div>
+
+<script type="module">
+  const log = (line) => {
+    const el = document.getElementById("log");
+    el.textContent += line + "\n";
+  };
+
+  const ws = new WebSocket("ws://127.0.0.1:8973");
+  let mySeat = -1;
+  let lastState = null;
+
+  ws.onopen = () => log("connected");
+  ws.onclose = () => log("disconnected");
+
+  ws.onmessage = (ev) => {
+    const msg = JSON.parse(ev.data);
+    if (msg.type === "joined") {
+      mySeat = msg.seat;
+      log(`you are seat ${mySeat}`);
+    } else if (msg.type === "room_full") {
+      log("room is full -- try closing another tab");
+    } else if (msg.type === "track_queued") {
+      log(`seat ${msg.seat} queued: ${msg.url}`);
+    } else if (msg.type === "room_state") {
+      lastState = msg;
+      render();
+    }
+  };
+
+  function render() {
+    const roomEl = document.getElementById("room");
+    roomEl.innerHTML = "";
+    if (!lastState) return;
+    for (let i = 0; i < lastState.maxSeats; i++) {
+      const occ = lastState.seats[i];
+      const el = document.createElement("div");
+      el.className = "seat";
+      if (!occ) el.classList.add("empty");
+      if (i === lastState.currentTurn) el.classList.add("turn");
+      if (i === mySeat) el.classList.add("me");
+      el.textContent = occ ? `Seat ${i}${i === mySeat ? " (you)" : ""}` : `Seat ${i} (empty)`;
+      roomEl.appendChild(el);
+    }
+  }
+
+  document.getElementById("queue").addEventListener("click", () => {
+    const url = document.getElementById("url").value.trim();
+    if (!url) return;
+    ws.send(JSON.stringify({ type: "queue_song", url }));
+  });
+</script>
+</body>
+</html>

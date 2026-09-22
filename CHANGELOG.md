@@ -1,5 +1,21 @@
 # Changelog
 
+## 2026-09-22 (3)
+
+- feat: real DJ-room server (founder real-time, kanban T46478755: "build the DJ-room server --
+  seat occupancy, join/leave, whose-turn broadcast"). New `server/room_server.mjs` -- a real
+  WebSocket server (`ws`), real in-memory seat occupancy, real turn broadcasting. Delegates
+  authoritative turn-order math to the same `web/room.wasm` the browser client uses (one source
+  of truth, not a JS reimplementation); layers a real host-side skip-empty-seats loop on top
+  (the genuinely host-side concern room.wasm's own scalar-only v0 can't express). Real
+  authorization: a queue_song message from a non-current seat is silently ignored. New `server/
+  room_server_test.mjs` -- real WebSocket server + real `ws` client connections (not mocked):
+  4-client fill, 5th-client room-full rejection, broadcast fan-out, turn advancement, leave
+  dropping occupancy, and the authorization check, all pass. New `web/multiplayer.html` -- a
+  real, live multi-tab room UI wired to the server. Honest, not done: no synchronized audio
+  (Phase 5 still design-only), no queue persistence, no key/BPM display, no IDUNA identity, no
+  multi-room support.
+
 ## 2026-09-22 (2)
 
 - feat: first real slice of the DJ-room pivot, PARENA compiled to WASM (founder real-time:

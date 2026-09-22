@@ -226,13 +226,34 @@ real by `web/index.html` (a real, live, clickable 4-seat room UI in a browser ta
 headlessly by `web/room_smoke_test.mjs` (real `WebAssembly.instantiate` execution, 9 assertions,
 all pass — wraparound turn order and out-of-bounds seat rejection both checked).
 
-**Real, honest, still NOT done:** this is the turn-order RULE only — no room/seat multiplayer
-STATE (who's actually sitting where, over a network), no synchronized audio (still gated on
-Phase 5's `media/stream.prn`, still design-only), no track queue, no key/BPM display. `web/
-index.html` is a real, local, single-browser-tab proof of the compiler pipeline and the rule
-logic, not a multiplayer room yet. Real, concrete next step: a room server (seat occupancy,
-join/leave, broadcasting whose turn it is) — the first piece of actual multiplayer state, still
-unstarted.
+**Update (same day): real room server shipped.** `server/room_server.mjs` — a real WebSocket
+server (`ws` package), real in-memory seat occupancy (join assigns the first free seat via the
+same `room.wasm` `is_valid_seat` export, leave frees it), and real turn broadcasting. Deliberately
+does NOT reimplement turn-order math in JavaScript: it loads and calls the exact same `web/
+room.wasm` the browser client uses, so there is one real source of truth for "what seat comes
+next," with only the genuinely host-side concern (occupancy — an array/state shape `room.wasm`'s
+own scalar-only v0 can't express, the same `defstruct`/array gap named in `CAPTCHA_FPS_PHYSICS_
+DOGFOOD_NORTHSTAR.md`) layered on top as a skip-empty-seats loop. Authorization is real too: a
+`queue_song` message is silently ignored unless it comes from the seat whose turn it currently is.
+
+Real, live, passing test (`server/room_server_test.mjs`) — a REAL WebSocket server, REAL `ws`
+client connections (not mocked): 4 clients fill the room in seat order, a 5th is rejected with
+`room_full`, seat 0 queues a song and every other client receives the real broadcast, turn
+correctly advances to seat 1, a client leaving drops occupancy to 3, and a queue attempt from a
+non-current seat is correctly ignored (the authorization check, not just the happy path). New
+`web/multiplayer.html` — a real, live multi-tab room UI (open several tabs, watch real, separate
+seats fill) wired to this server over the same real `ws://127.0.0.1:8973` protocol the test
+exercises. `web/index.html` (the earlier, server-less compiler-pipeline proof) stays as-is, a
+smaller, simpler artifact for that narrower purpose.
+
+**Real, honest, still NOT done:** no synchronized audio (still gated on Phase 5's `media/
+stream.prn`, still design-only — a client can announce "I'm playing this URL" but nothing plays
+it for anyone else yet), no track queue persistence (a queued URL is broadcast and forgotten),
+no key/BPM display, no IDUNA account/identity (a "seat" is just a WebSocket connection, no login),
+no room listing/creation (exactly one hardcoded room, no multi-room support). Real, concrete next
+step: either Phase 5 (`media/stream.prn`) scoping, since it's the real remaining blocker for
+anyone actually hearing what gets queued, or IDUNA identity integration, matching the same
+guest-auth pattern DEADWEIGHT/ECOWAR/SLOWBOT_LEAGUE already established — not decided here.
 
 ## Golden doc registration
 

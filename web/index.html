@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>MIXFORGE — DJ Room (PARENA/WASM proof)</title>
+<style>
+  body { background: #0b0b12; color: #e8e8f0; font-family: system-ui, sans-serif; padding: 2rem; }
+  h1 { color: #ff5fa2; }
+  .room { display: flex; gap: 1rem; margin-top: 2rem; }
+  .seat { border: 2px solid #333; border-radius: 8px; padding: 1rem; width: 8rem; text-align: center; }
+  .seat.active { border-color: #ff5fa2; box-shadow: 0 0 12px #ff5fa2; }
+  .seat.invalid { opacity: 0.3; }
+  button { margin-top: 2rem; padding: 0.6rem 1.2rem; font-size: 1rem; }
+  #status { margin-top: 1rem; color: #9ad; }
+</style>
+</head>
+<body>
+<h1>MIXFORGE DJ Room</h1>
+<p>Real, live proof: this page loads <code>room.wasm</code> — compiled from
+<code>PARENA/stdlib/mixforge/room.prn</code> via <code>parena build</code> → real LLVM IR →
+<code>llc -mtriple=wasm32-unknown-unknown</code> → <code>wasm-ld</code> — and calls its real
+<code>next_seat</code>/<code>is_valid_seat</code> exports directly. No server, no mock: the turn-
+order logic running below is genuine PARENA-compiled WebAssembly.</p>
+
+<div class="room" id="room"></div>
+<button id="advance">Advance turn (next-seat)</button>
+<div id="status"></div>
+
+<script type="module">
+  const SEAT_COUNT = 4;
+  const res = await fetch("room.wasm");
+  const bytes = await res.arrayBuffer();
+  const { instance } = await WebAssembly.instantiate(bytes, {});
+  const { next_seat, is_valid_seat, max_seats } = instance.exports;
+
+  const status = document.getElementById("status");
+  status.textContent = `room.wasm loaded — max_seats() = ${max_seats()}`;
+
+  let current = 0;
+  const roomEl = document.getElementById("room");
+  function render() {
+    roomEl.innerHTML = "";
+    for (let i = 0; i < SEAT_COUNT; i++) {
+      const el = document.createElement("div");
+      el.className = "seat" + (i === current ? " active" : "");
+      if (!is_valid_seat(i, SEAT_COUNT)) el.classList.add("invalid");
+      el.textContent = `Seat ${i}`;
+      roomEl.appendChild(el);
+    }
+  }
+  render();
+
+  document.getElementById("advance").addEventListener("click", () => {
+    current = next_seat(current, SEAT_COUNT);
+    render();
+  });
+</script>
+</body>
+</html>

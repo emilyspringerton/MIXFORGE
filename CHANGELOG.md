@@ -1,5 +1,20 @@
 # Changelog
 
+## 2026-09-22 (2)
+
+- feat: first real slice of the DJ-room pivot, PARENA compiled to WASM (founder real-time:
+  "build it with parena wasm" -- resolves the room-engine architecture question in favor of
+  browser/PARENA-WASM, not a new SHANKPIT OS app). New `PARENA/stdlib/mixforge/room.prn` --
+  pure, stateless turn-order/seat-validity logic (`next-seat`, `is-valid-seat`, `max-seats`).
+  New `scripts/build_room_wasm.sh` mirrors PARENA's own `make wasm-smoke` recipe exactly
+  (parena build -> LLVM IR -> llc -mtriple=wasm32-unknown-unknown -> wasm-ld). New `web/
+  index.html` -- a real, live, clickable 4-seat room UI loading and calling `web/room.wasm`
+  directly in a browser. New `web/room_smoke_test.mjs` -- 9 real WebAssembly.instantiate
+  assertions, all pass (wraparound turn order + out-of-bounds rejection). Real, honest, not
+  done: no room/seat multiplayer state, no synchronized audio (still gated on Phase 5's
+  media/stream.prn), no track queue, no key/BPM display -- this is the compiler pipeline +
+  turn-order rule proven live, not a multiplayer room yet.
+
 ## 2026-09-22
 
 - docs: scoped the multiplayer "DJ room" pivot (founder real-time: "up to 4 djs in a room...

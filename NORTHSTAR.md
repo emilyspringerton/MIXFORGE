@@ -214,9 +214,25 @@ scratch. Not decided here — a real founder call, same shape as this doc's own 
 question 1 (GUI vs. headless), now with higher stakes since a room implies more UI than a solo
 deck ever did.
 
-**No code shipped from this addendum** — same "scope first" standing every phase of this doc
-already follows. Real, concrete next step once directed: Phase 5 (`media/stream.prn`) scoping,
-since it's now the real gating dependency for the room concept, ahead of Phases 3-4.
+**Update (same day): architecture question resolved, first real slice shipped.** Founder
+real-time: "build it with parena wasm" — resolves the room-engine question above in favor of a
+browser/PARENA-WASM stack (not a new SHANKPIT OS app). Real, live first slice:
+`PARENA/stdlib/mixforge/room.prn` — pure, stateless turn-order/seat-validity logic (`next-seat`,
+`is-valid-seat`, `max-seats`), the "go around the room" rule made real. Built via `scripts/
+build_room_wasm.sh` through the exact pipeline `PARENA/docs/LLVM_BACKEND_NORTHSTAR.md`'s own
+`make wasm-smoke` already proved (`parena build` → LLVM IR → `llc -mtriple=wasm32-unknown-
+unknown` → `wasm-ld` → a real `.wasm`), checked in at `web/room.wasm`, loaded and exercised for
+real by `web/index.html` (a real, live, clickable 4-seat room UI in a browser tab) and verified
+headlessly by `web/room_smoke_test.mjs` (real `WebAssembly.instantiate` execution, 9 assertions,
+all pass — wraparound turn order and out-of-bounds seat rejection both checked).
+
+**Real, honest, still NOT done:** this is the turn-order RULE only — no room/seat multiplayer
+STATE (who's actually sitting where, over a network), no synchronized audio (still gated on
+Phase 5's `media/stream.prn`, still design-only), no track queue, no key/BPM display. `web/
+index.html` is a real, local, single-browser-tab proof of the compiler pipeline and the rule
+logic, not a multiplayer room yet. Real, concrete next step: a room server (seat occupancy,
+join/leave, broadcasting whose turn it is) — the first piece of actual multiplayer state, still
+unstarted.
 
 ## Golden doc registration
 

@@ -1,5 +1,17 @@
 # Changelog
 
+## 2026-09-22
+
+- docs: scoped the multiplayer "DJ room" pivot (founder real-time: "up to 4 djs in a room...
+  queueing songs from youtube... real dj primitives... assume cruise ship, youtube proxy").
+  Named the real prior art (Turntable.fm, 2011-2013, including its own real ASCAP/BMI licensing
+  shutdown -- directly load-bearing given this doc's own already-deferred licensing stance).
+  Named 3 genuinely new requirement classes: room/seat multiplayer state, synchronized room-wide
+  audio playback (promotes Phase 5 streaming from last to a near-term blocker), and clarified
+  "youtube proxy" against the already-shipped local-download import pipeline. Real, undecided
+  architecture question named: reuse SHANKPIT's own proven multiplayer-room engine vs. a new
+  lightweight web room UI. No code shipped. See NORTHSTAR.md's own new addendum section.
+
 ## 2026-09-04
 
 - MF-CORE-12441 ("mixforge iterate on the core product"): **this repo's own first real code**,

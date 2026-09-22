@@ -155,6 +155,69 @@ Two real gaps, of different sizes:
    on `media/codec`/`media/audio`) — share code once those exist, or develop independently?
    Not decided here.
 
+## Pivot: the multiplayer DJ room (2026-09-22, same-session addendum)
+
+Founder real-time: "there was a game we all used to play when i worked at a startup - like up to
+4 djs in a room and you would see each person had a dj table set up at a wall of the room and you
+would go around the room queueing songs from youtube - lets pivot the mixforge app into that
+somehow with real dj primitives built in so i can run 2 youtubes at once or at least our proxy
+for the youtube and i can get like intelligent key information on the current playing song etc -
+again assume they are all on a cruise ship and the tech is a youtube proxy."
+
+**Real, named prior art, not invented from the description alone:** this is Turntable.fm
+(2011-2013) — a real, well-known product with this exact shape: a room holds up to five DJ booth
+seats, each occupied DJ queues tracks, everyone in the room hears the current DJ's track together,
+the crowd votes "awesome"/"lame." Naming it because its own real history is directly load-bearing
+here, not just trivia: **Turntable.fm was sued by ASCAP/BMI and major labels over public-
+performance licensing for exactly this "synchronized shared listening room" mechanism, and that
+pressure was a real factor in its eventual shutdown.** This doc's own existing "cruise ship /
+international waters" framing (from the original legacy transcript, §"What the legacy
+conversation actually specified" above) already names licensing as explicitly, knowingly
+deferred, not solved — the pivot doesn't change that stance, but it does raise the real stakes of
+it, since a synchronized multi-listener room is a materially bigger public-performance surface
+than one hobbyist's own local two-deck mix. Named here plainly so it's a real, informed choice
+going forward, not a silently-inherited risk.
+
+**What's genuinely new versus everything scoped above (Phases 0-5):** every existing phase is
+still needed — import/library (shipped), two-deck crossfade, BPM/key detection, beatmatching —
+but they now get consumed by a ROOM, not a solo user. Three real, new requirement classes:
+
+1. **Room/seat multiplayer state** — up to 4 DJ booth seats, occupancy, a queue-then-DJ turn
+   order ("go around the room queueing songs"), spectator/listener presence. No existing MIXFORGE
+   code touches this at all; the closest real precedent in this monorepo is `SHANKPIT/apps/lobby`
+   (seat/room occupancy) and IDUNA's guest-auth/room-join patterns already proven for DEADWEIGHT/
+   ECOWAR/SLOWBOT_LEAGUE.
+2. **Synchronized room-wide audio playback — the single hardest new piece, harder than anything
+   scoped so far.** Every listener in the room needs to hear the SAME track, in sync, at
+   (roughly) the same playback position, over a network — a real, hard, "shared listening"
+   distributed-systems problem, not a local two-deck crossfade problem. This directly promotes
+   Phase 5 ("live streaming," `stdlib/media/stream.prn`, previously the LAST phase, design-only,
+   named only for its own future "full audio/video streaming" motivation) into a real,
+   near-term blocker — the room pivot can't work without it, so it needs resequencing earlier
+   relative to Phases 2-4, not left last.
+3. **"2 youtubes at once, or our proxy" clarified against the real, already-shipped mechanism**:
+   MIXFORGE's own real V0 (`import.prn`) already downloads a track locally via `yt-dlp` rather
+   than live-relaying a YouTube stream — this is actually the SAFER shape versus what Turntable.fm
+   did (which live-relayed audio in real time), not a new thing to build. "2 youtubes at once" is
+   the existing Phase 2 two-deck concept (already scoped), now needing to run per-DJ-seat instead
+   of per-solo-user. "Our proxy for the youtube" already exists in embryonic form as this same
+   import pipeline — the real remaining gap is turning a downloaded file into a room-wide
+   synchronized stream (item 2 above), not fetching it in the first place.
+
+**Real, undecided architecture question, not guessed at here:** does the ROOM itself need a real
+rendered space ("each person had a dj table set up at a wall of the room" implies a real, visible
+spatial layout, not a plain list UI)? If so, this monorepo already has a proven multiplayer-room
+rendering + netcode engine (`SHANKPIT`'s own lobby/apps pattern, C/SDL2, server-authoritative) —
+reusing it (a DJ room as a new SHANKPIT OS app, matching this session's own IDUNA.GAME/REDGARDEN/
+EDITOR.GAME additions) is a real, live option versus building a new lightweight web room UI from
+scratch. Not decided here — a real founder call, same shape as this doc's own existing open
+question 1 (GUI vs. headless), now with higher stakes since a room implies more UI than a solo
+deck ever did.
+
+**No code shipped from this addendum** — same "scope first" standing every phase of this doc
+already follows. Real, concrete next step once directed: Phase 5 (`media/stream.prn`) scoping,
+since it's now the real gating dependency for the room concept, ahead of Phases 3-4.
+
 ## Golden doc registration
 
 Registered in `EMILY/context/golden-docs-index.md` as `MIXFORGE-NORTH` per S205-101's own

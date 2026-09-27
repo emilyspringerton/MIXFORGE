@@ -1,0 +1,577 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MIXFORGE — DJ Room</title>
+<style>
+  :root { --bg:#0b0b12; --panel:#151522; --line:#2a2a3d; --fg:#e8e8f0; --dim:#8a8aa0; --hot:#ff5fa2; --cool:#5fd3ff; --ok:#7dff9a; --bad:#ff6f6f; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--fg); font:14px/1.35 system-ui, sans-serif; }
+  header { display:flex; align-items:center; gap:1rem; padding:.8rem 1rem; border-bottom:1px solid var(--line); flex-wrap:wrap; }
+  header h1 { margin:0; font-size:1.2rem; color:var(--hot); letter-spacing:.08em; }
+  header .note { color:var(--dim); font-size:.8rem; }
+  button, select, input[type=number], input[type=text] { background:#20203a; color:var(--fg); border:1px solid var(--line); border-radius:6px; padding:.3rem .55rem; font:inherit; }
+  button:hover:not(:disabled) { border-color:var(--cool); }
+  button:disabled { opacity:.4; cursor:not-allowed; }
+  button.on { background:var(--hot); color:#000; border-color:var(--hot); }
+  button.big { padding:.5rem 1rem; font-weight:600; }
+  main { padding:1rem; display:grid; gap:1rem; grid-template-columns: repeat(4, minmax(170px,1fr)) minmax(190px, 1.1fr); }
+  @media (max-width: 1100px) { main { grid-template-columns: repeat(2, 1fr); } }
+  @media (max-width: 560px) { main { grid-template-columns: 1fr; } }
+  .strip, .center { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:.7rem; display:flex; flex-direction:column; gap:.45rem; }
+  .strip.room { border-color: var(--hot); }
+  .strip h2 { margin:0; font-size:1rem; display:flex; justify-content:space-between; align-items:center; gap:.4rem; }
+  .strip h2 small { color:var(--dim); font-weight:400; font-size:.75rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:9rem; }
+  .badge { font-size:.62rem; background:var(--hot); color:#000; border-radius:4px; padding:0 .3rem; font-weight:700; letter-spacing:.03em; }
+  label { display:flex; align-items:center; gap:.4rem; font-size:.78rem; color:var(--dim); }
+  label span { width:3.2rem; }
+  label output { width:2.8rem; text-align:right; color:var(--fg); font-variant-numeric: tabular-nums; }
+  input[type=range] { flex:1; accent-color:var(--hot); min-width:0; }
+  .row { display:flex; gap:.35rem; flex-wrap:wrap; align-items:center; }
+  .waveWrap { position:relative; height:40px; border-radius:4px; overflow:hidden; background:#0f0f1a; cursor:pointer; }
+  .waveWrap canvas { position:absolute; inset:0; width:100%; height:100%; display:block; }
+  .meter { height:8px; background:#222236; border-radius:4px; overflow:hidden; }
+  .meter > div { height:100%; width:0; background:linear-gradient(90deg, var(--ok) 70%, #ffd35f 85%, #ff4f4f); }
+  .fader input { accent-color:var(--cool); }
+  .center h2 { margin:0; font-size:1rem; }
+  section.sampler { grid-column: 1 / -1; background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:.8rem; display:grid; gap:1rem; grid-template-columns: minmax(260px, 420px) 1fr; }
+  @media (max-width: 760px) { section.sampler { grid-template-columns: 1fr; } }
+  .pads { display:grid; grid-template-columns: repeat(4, 1fr); gap:.45rem; }
+  .pad { aspect-ratio: 1.25; border-radius:8px; border:1px solid var(--line); background:#1d1d33; color:var(--fg); display:flex; flex-direction:column; justify-content:space-between; align-items:flex-start; padding:.35rem .45rem; user-select:none; cursor:pointer; font-size:.72rem; }
+  .pad b { font-size:.85rem; }
+  .pad.loaded { background:#262649; }
+  .pad.hit { background:var(--hot); color:#000; }
+  .pad.chrom { outline:2px solid var(--cool); }
+  .pad kbd { color:var(--dim); font-size:.68rem; }
+  .log { font:12px ui-monospace, monospace; color:var(--dim); height:7.5rem; overflow:auto; background:#0f0f1a; border-radius:6px; padding:.4rem; white-space:pre; }
+  .hint { color:var(--dim); font-size:.78rem; margin:0; }
+  #overlay { position:fixed; inset:0; background:rgba(5,5,10,.9); display:flex; align-items:center; justify-content:center; flex-direction:column; gap:1rem; text-align:center; padding:1rem; z-index:10; }
+
+  section.room { margin:1rem; background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:.8rem; display:flex; flex-direction:column; gap:.6rem; }
+  .seats { display:flex; gap:.6rem; flex-wrap:wrap; }
+  .seat { border:2px solid var(--line); border-radius:8px; padding:.5rem .8rem; min-width:6rem; text-align:center; font-size:.8rem; }
+  .seat.turn { border-color:var(--hot); box-shadow:0 0 10px rgba(255,95,162,.5); }
+  .seat.me { border-color:var(--ok); }
+  .seat.empty { opacity:.35; }
+  #wsStatus.ok { color:var(--ok); }
+  #wsStatus.bad { color:var(--bad); }
+  #nowPlaying { font-size:.85rem; color:var(--cool); }
+</style>
+</head>
+<body>
+<div id="overlay">
+  <h1 style="color:var(--hot);margin:0">MIXFORGE</h1>
+  <p class="hint" style="max-width:34rem">One room, up to 4 DJ seats. Deck 1 is the room's shared
+    deck -- whoever's turn it is queues a YouTube URL, everyone in the room hears the same
+    download play back together. Decks 2-4 are yours alone (open a local file, practice, sample).
+    Browsers need a click before they will play sound.</p>
+  <button class="big" id="start">Start audio</button>
+</div>
+
+<header>
+  <h1>MIXFORGE</h1>
+  <button id="playAll">Play all 4</button>
+  <label style="color:var(--fg)">MIDI in <select id="midiIn"><option value="">(none)</option></select></label>
+  <span class="note" id="midiStatus"></span>
+  <span class="note" id="dspStatus"></span>
+</header>
+
+<section class="room">
+  <div class="row" style="justify-content:space-between">
+    <b>DJ Room</b>
+    <span class="note" id="wsStatus">connecting…</span>
+  </div>
+  <div class="seats" id="seats"></div>
+  <div class="row">
+    <input id="url" type="text" placeholder="https://youtu.be/… or https://www.youtube.com/watch?v=…" size="42">
+    <button id="queue" disabled>Queue to room</button>
+    <span class="note" id="turnNote"></span>
+  </div>
+  <div class="note" id="nowPlaying"></div>
+</section>
+
+<main id="main"></main>
+
+<section class="sampler">
+  <div>
+    <div class="pads" id="pads"></div>
+  </div>
+  <div style="display:flex;flex-direction:column;gap:.6rem">
+    <h2 style="margin:0;font-size:1rem">MIDI sampler</h2>
+    <p class="hint">Pads answer MIDI notes 36–51 (C2–D#3, any channel) — or the keys <kbd>1234 QWER ASDF ZXCV</kbd>.
+      Sample off <em>any</em> deck, including deck 1 (the room's currently-playing track) or a
+      local file loaded into any deck. Notes outside the pad bank play the <em>chromatic pad</em>
+      (outlined) pitched in exact 12-TET from its root; the pitch wheel bends it ±2 semitones.
+      CC on MIDI channels 1–4 drive decks 1–4: CC7 fader, CC10 pan, CC74 filter, CC1 pitch, CC2 trim, CC8 crossfader.</p>
+    <div class="row">
+      <b style="font-size:.85rem">Sample</b>
+      <select id="capBeats"><option value="0.25">¼ beat</option><option value="0.5">½ beat</option><option value="1" selected>1 beat</option><option value="2">2 beats</option><option value="4">1 bar</option><option value="8">2 bars</option></select>
+      <span class="hint">from</span>
+      <select id="capDeck"><option value="0">deck 1 (room)</option><option value="1">deck 2</option><option value="2">deck 3</option><option value="3">deck 4</option></select>
+      <span class="hint">into pad</span>
+      <select id="capPad"></select>
+      <button id="capGo">Sample now</button>
+    </div>
+    <div class="row">
+      <span class="hint">Chromatic pad</span>
+      <select id="chromPad"></select>
+      <label><span>Sampler</span><input type="range" id="samplerGain" min="0" max="1.5" step="0.01" value="0.9"><output>0.90</output></label>
+    </div>
+    <div class="log" id="log"></div>
+  </div>
+</section>
+
+<script type="module">
+import { makeLoop, makeKit } from "./demo_content.mjs";
+import { instantiateDsp, DECKS, PADS } from "./engine.mjs";
+import { estimateBpm } from "./bpm.mjs";
+
+const $ = (s, el = document) => el.querySelector(s);
+const logEl = $("#log");
+function log(line) {
+  logEl.textContent = (line + "\n" + logEl.textContent).slice(0, 4000);
+}
+
+let ctx, node, dsp;
+const deckState = Array.from({ length: DECKS }, () => ({ bpm: 0, range: 0.08, playing: false, len: 0, rate: 48000, waveCanvas: null }));
+const DEMO = ["drums", "bass", "chords", "arp"];
+const ASSIGN_DEFAULT = [0, 2, 1, 1]; // deck 1 -> A, deck 2 -> B, 3/4 thru
+const KEYS = "1234qwerasdfzxcv";
+const NOTE_NAMES = ["C","C#","D","D#","E","F","F#","G","G#","A","A#","B"];
+const noteName = (n) => NOTE_NAMES[n % 12] + (Math.floor(n / 12) - 1);
+
+function send(m, transfer) { node && node.port.postMessage(m, transfer || []); }
+
+// ---- room / WebSocket -------------------------------------------------------------------------
+// Relative to whatever host actually served this page -- wss://mixforge.okemily.com/ws in
+// production, ws://127.0.0.1:8973 in local dev via nginx. See NORTHSTAR.md's own "Phase 5
+// scoping" section for the full real architecture this implements.
+const wsProto = location.protocol === "https:" ? "wss:" : "ws:";
+const ws = new WebSocket(`${wsProto}//${location.host}/ws`);
+let mySeat = -1;
+let currentTurn = -1;
+let lastRoomState = null;
+let clockOffsetMs = 0; // serverTime ~= Date.now() + clockOffsetMs
+let pendingPlay = null; // a real {url, startAtServerTimeMs} that arrived before audio started
+
+function wsSend(m) { if (ws.readyState === ws.OPEN) ws.send(JSON.stringify(m)); }
+
+function syncClock() {
+  const t0 = Date.now();
+  wsSend({ type: "ping", t0 });
+}
+
+ws.onopen = () => { $("#wsStatus").textContent = "connected"; $("#wsStatus").className = "ok"; syncClock(); setInterval(syncClock, 10000); };
+ws.onclose = () => { $("#wsStatus").textContent = "disconnected"; $("#wsStatus").className = "bad"; $("#queue").disabled = true; };
+
+ws.onmessage = (ev) => {
+  const msg = JSON.parse(ev.data);
+  if (msg.type === "joined") {
+    mySeat = msg.seat;
+    log(`you are seat ${mySeat + 1}`);
+  } else if (msg.type === "room_full") {
+    log("room is full (max 4 seats) -- try again once someone leaves");
+    $("#wsStatus").textContent = "room full"; $("#wsStatus").className = "bad";
+  } else if (msg.type === "room_state") {
+    lastRoomState = msg;
+    currentTurn = msg.currentTurn;
+    renderSeats();
+    if (msg.nowPlaying && msg.nowPlaying.url) {
+      $("#nowPlaying").textContent = `now playing (seat ${msg.nowPlaying.seat + 1}): ${msg.nowPlaying.url.split("/").pop()}`;
+    }
+  } else if (msg.type === "track_queued") {
+    log(`seat ${msg.seat + 1} queued: ${msg.url}`);
+  } else if (msg.type === "downloading") {
+    log(`downloading seat ${msg.seat + 1}'s track… (real yt-dlp download, needs a moment)`);
+    $("#nowPlaying").textContent = `downloading seat ${msg.seat + 1}'s track…`;
+  } else if (msg.type === "queue_failed") {
+    log(`queue failed: ${msg.error}`);
+    $("#nowPlaying").textContent = `queue failed: ${msg.error}`;
+  } else if (msg.type === "play") {
+    log(`seat ${msg.seat + 1}'s track is ready -- scheduling synchronized playback`);
+    handlePlay(msg);
+  } else if (msg.type === "pong") {
+    const rtt = Date.now() - msg.t0;
+    clockOffsetMs = msg.serverTime - (msg.t0 + rtt / 2);
+  }
+};
+
+function renderSeats() {
+  const el = $("#seats");
+  el.innerHTML = "";
+  if (!lastRoomState) return;
+  for (let i = 0; i < lastRoomState.maxSeats; i++) {
+    const occ = lastRoomState.seats[i];
+    const d = document.createElement("div");
+    d.className = "seat";
+    if (!occ) d.classList.add("empty");
+    if (i === lastRoomState.currentTurn) d.classList.add("turn");
+    if (i === mySeat) d.classList.add("me");
+    d.textContent = occ ? `Seat ${i + 1}${i === mySeat ? " (you)" : ""}` : `Seat ${i + 1} (empty)`;
+    el.appendChild(d);
+  }
+  const isMyTurn = mySeat >= 0 && mySeat === lastRoomState.currentTurn;
+  $("#queue").disabled = !isMyTurn || ws.readyState !== ws.OPEN;
+  $("#turnNote").textContent = isMyTurn ? "it's your turn!" : `waiting for seat ${lastRoomState.currentTurn + 1}`;
+}
+
+$("#queue").addEventListener("click", () => {
+  const url = $("#url").value.trim();
+  if (!url) return;
+  wsSend({ type: "queue_song", url });
+  $("#url").value = "";
+});
+
+// handlePlay -- real, "roughly synchronized" (not sample-accurate) scheduled start: fetch the
+// server-cached file, decode it, load it into deck 1 (the room's shared deck, overwriting
+// whatever was there), then schedule the actual `playing=true` at the computed local-clock
+// equivalent of the server's own broadcast timestamp. See NORTHSTAR.md's own "Phase 5 scoping"
+// section for why this isn't (and doesn't need to be) sample-accurate Web-Audio start(when) --
+// deck playback here is a custom per-sample AudioWorklet loop, not a stock AudioBufferSourceNode.
+async function handlePlay(msg) {
+  if (!ctx) { pendingPlay = msg; log("(audio not started yet -- will play as soon as you click Start audio)"); return; }
+  try {
+    const buf = await ctx.decodeAudioData(await (await fetch(msg.url)).arrayBuffer());
+    const L = new Float32Array(buf.getChannelData(0));
+    const R = new Float32Array(buf.numberOfChannels > 1 ? buf.getChannelData(1) : buf.getChannelData(0));
+    setDeckAudio(0, L, R, buf.sampleRate, msg.url.split("/").pop(), 0);
+    const localTarget = msg.startAtServerTimeMs - clockOffsetMs;
+    const delay = Math.max(0, localTarget - Date.now());
+    if (delay === 0) log("room track decoded later than its scheduled start -- playing immediately, slightly behind the room");
+    setTimeout(() => { send({ type: "seek", i: 0, pos: 0 }); setPlaying(0, true); }, delay);
+  } catch (err) {
+    log(`could not play the room track: ${err.message}`);
+  }
+}
+
+// ---- channel strips -------------------------------------------------------------------------
+function slider(label, key, min, max, step, value, fmt = (v) => (+v).toFixed(2)) {
+  return `<label><span>${label}</span><input type="range" data-key="${key}" min="${min}" max="${max}" step="${step}" value="${value}"><output>${fmt(value)}</output></label>`;
+}
+const main = $("#main");
+for (let i = 0; i < DECKS; i++) {
+  const el = document.createElement("div");
+  el.className = "strip" + (i === 0 ? " room" : "");
+  el.dataset.deck = i;
+  el.innerHTML = `
+    <h2>Deck ${i + 1} ${i === 0 ? '<span class="badge">ROOM</span>' : ""}<small class="name">empty</small></h2>
+    <div class="row">
+      <select class="demo"><option value="">demo loop…</option>${DEMO.map((d) => `<option>${d}</option>`).join("")}</select>
+      <input type="file" class="file" accept="audio/*" style="width:6.5rem;font-size:.7rem">
+    </div>
+    <div class="waveWrap"><canvas class="wave" width="320" height="40"></canvas></div>
+    <div class="row">
+      <button class="play">Play</button><button class="cue">Cue</button>
+      <label style="flex:1"><span>BPM</span><input type="number" class="bpm" min="0" max="300" step="0.1" style="width:4.3rem"></label>
+      <button class="sync" title="Beatmatch to deck 1's effective tempo (beatmatch-rate in mixer.prn)">Sync</button>
+    </div>
+    ${slider("Pitch", "pitch", -1, 1, 0.001, 0, (v) => `${(v * 8).toFixed(1)}%`)}
+    ${slider("Trim", "trim", 0, 2, 0.01, 1)}
+    ${slider("Filter", "filter", -1, 1, 0.01, 0, (v) => (+v === 0 ? "off" : +v < 0 ? "LP" : "HP"))}
+    ${slider("Pan", "pan", -1, 1, 0.01, 0)}
+    <div class="fader">${slider("Fader", "fader", 0, 1, 0.005, 0.8)}</div>
+    <div class="row">
+      <button class="mute">Mute</button><button class="solo">Solo</button>
+      <select class="assign" title="Crossfader assign"><option value="0">X-fade A</option><option value="1">Thru</option><option value="2">X-fade B</option></select>
+    </div>
+    <div class="meter"><div></div></div>`;
+  main.appendChild(el);
+  $(".assign", el).value = ASSIGN_DEFAULT[i];
+  deckState[i].waveCanvas = $(".wave", el);
+
+  el.querySelectorAll("input[type=range]").forEach((r) => {
+    const out = r.nextElementSibling;
+    const fmtFn = { pitch: (v) => `${(v * 8).toFixed(1)}%`, filter: (v) => (+v === 0 ? "off" : +v < 0 ? "LP" : "HP") }[r.dataset.key] || ((v) => (+v).toFixed(2));
+    r.addEventListener("input", () => { out.textContent = fmtFn(r.value); send({ type: "deckParam", i, key: r.dataset.key, value: +r.value }); });
+    r.addEventListener("dblclick", () => { r.value = r.defaultValue; r.dispatchEvent(new Event("input")); });
+  });
+  $(".assign", el).addEventListener("change", (e) => send({ type: "deckParam", i, key: "assign", value: +e.target.value }));
+  for (const k of ["mute", "solo"]) {
+    const b = $("." + k, el);
+    b.addEventListener("click", () => { b.classList.toggle("on"); send({ type: "deckParam", i, key: k, value: b.classList.contains("on") }); });
+  }
+  $(".play", el).addEventListener("click", () => setPlaying(i, !deckState[i].playing));
+  $(".cue", el).addEventListener("click", () => send({ type: "seek", i, pos: 0 }));
+  $(".waveWrap", el).addEventListener("click", (e) => {
+    const r = e.currentTarget.getBoundingClientRect();
+    send({ type: "seek", i, pos: Math.floor(((e.clientX - r.left) / r.width) * deckState[i].len) });
+  });
+  $(".bpm", el).addEventListener("change", (e) => { deckState[i].bpm = +e.target.value; send({ type: "deckParam", i, key: "bpm", value: +e.target.value }); });
+  $(".sync", el).addEventListener("click", () => syncDeck(i));
+  $(".demo", el).addEventListener("change", (e) => { if (e.target.value) loadDemo(i, e.target.value); e.target.value = ""; });
+  $(".file", el).addEventListener("change", (e) => e.target.files[0] && loadFile(i, e.target.files[0]));
+}
+
+const center = document.createElement("div");
+center.className = "center";
+center.innerHTML = `
+  <h2>Master</h2>
+  ${slider("X-fade", "crossfader", 0, 1, 0.005, 0.5)}
+  ${slider("Master", "master", 0, 1.5, 0.01, 0.8)}
+  <div class="meter" id="mL"><div></div></div>
+  <div class="meter" id="mR"><div></div></div>
+  <p class="hint">Crossfader is equal-power; decks set to <em>Thru</em> ignore it. The sampler bus always rides Thru. The bus is soft-clipped, so four hot decks saturate instead of crackling.</p>
+  <p class="hint" id="voices">voices: 0</p>`;
+main.appendChild(center);
+center.querySelectorAll("input[type=range]").forEach((r) => {
+  const out = r.nextElementSibling;
+  r.addEventListener("input", () => { out.textContent = (+r.value).toFixed(2); send({ type: "global", key: r.dataset.key, value: +r.value }); });
+  r.addEventListener("dblclick", () => { r.value = r.defaultValue; r.dispatchEvent(new Event("input")); });
+});
+
+function setPlaying(i, on) {
+  deckState[i].playing = on;
+  send({ type: "deckParam", i, key: "playing", value: on });
+  const b = $(`.strip[data-deck="${i}"] .play`);
+  b.classList.toggle("on", on);
+  b.textContent = on ? "Pause" : "Play";
+}
+
+function syncDeck(i) {
+  const master = deckState[0];
+  const me = deckState[i];
+  if (!master.bpm || !me.bpm) { log(`sync: set a BPM on deck 1 and deck ${i + 1} first`); return; }
+  const pitch0 = +$(`.strip[data-deck="0"] input[data-key=pitch]`).value;
+  const target = master.bpm * dsp.tempo_rate(pitch0, master.range);
+  const rate = dsp.beatmatch_rate(me.bpm, target);
+  const pitch = Math.max(-1, Math.min(1, (rate - 1) / me.range));
+  const r = $(`.strip[data-deck="${i}"] input[data-key=pitch]`);
+  r.value = pitch; r.dispatchEvent(new Event("input"));
+  log(`sync deck ${i + 1}: ${me.bpm} -> ${target.toFixed(2)} bpm (rate ${rate.toFixed(4)}${Math.abs(rate - 1) > me.range ? ", clamped to ±8%" : ""})`);
+}
+
+// drawWaveform -- a real min/max peak-overview render, cached to an offscreen canvas once per
+// load so the ~30Hz playhead update below only ever draws a cheap overlay, not a full re-render.
+function drawWaveform(i, L) {
+  const canvas = deckState[i].waveCanvas;
+  const w = canvas.width, h = canvas.height;
+  const off = document.createElement("canvas");
+  off.width = w; off.height = h;
+  const octx = off.getContext("2d");
+  octx.fillStyle = "#0f0f1a"; octx.fillRect(0, 0, w, h);
+  const step = Math.max(1, Math.floor(L.length / w));
+  octx.strokeStyle = "#5fd3ff";
+  octx.beginPath();
+  for (let x = 0; x < w; x++) {
+    const start = x * step;
+    let min = 1, max = -1;
+    for (let k = 0; k < step && start + k < L.length; k++) {
+      const v = L[start + k];
+      if (v < min) min = v;
+      if (v > max) max = v;
+    }
+    const y0 = h / 2 - max * (h / 2 - 1);
+    const y1 = h / 2 - min * (h / 2 - 1);
+    octx.moveTo(x + 0.5, y0);
+    octx.lineTo(x + 0.5, y1);
+  }
+  octx.stroke();
+  deckState[i].waveImage = off;
+  redrawWave(i, 0);
+}
+
+function redrawWave(i, frac) {
+  const d = deckState[i];
+  const canvas = d.waveCanvas;
+  const cctx = canvas.getContext("2d");
+  const w = canvas.width, h = canvas.height;
+  cctx.clearRect(0, 0, w, h);
+  if (d.waveImage) cctx.drawImage(d.waveImage, 0, 0);
+  else { cctx.fillStyle = "#0f0f1a"; cctx.fillRect(0, 0, w, h); }
+  const x = Math.max(0, Math.min(w, frac * w));
+  cctx.fillStyle = "rgba(255,95,162,0.18)";
+  cctx.fillRect(0, 0, x, h);
+  cctx.strokeStyle = "#ff5fa2";
+  cctx.beginPath(); cctx.moveTo(x, 0); cctx.lineTo(x, h); cctx.stroke();
+}
+
+// runBpmEstimate -- async so a long room/local track never blocks the UI thread noticeably;
+// results are always labeled an estimate, never presented as ground truth (see bpm.mjs's own
+// header for why, and NORTHSTAR.md for the real, deferred aubio-based Phase 3 detector).
+function runBpmEstimate(i, L, rate) {
+  setTimeout(() => {
+    const bpm = estimateBpm(L, rate);
+    if (bpm > 0 && !deckState[i].bpm) {
+      deckState[i].bpm = bpm;
+      $(`.strip[data-deck="${i}"] .bpm`).value = bpm;
+      send({ type: "deckParam", i, key: "bpm", value: bpm });
+      log(`deck ${i + 1}: ~${bpm} BPM (estimated, autocorrelation -- not ground truth)`);
+    }
+  }, 0);
+}
+
+function setDeckAudio(i, L, R, rate, name, bpm) {
+  deckState[i].len = L.length; deckState[i].rate = rate; deckState[i].bpm = 0;
+  $(`.strip[data-deck="${i}"] .name`).textContent = name;
+  $(`.strip[data-deck="${i}"] .bpm`).value = "";
+  if (bpm) { deckState[i].bpm = bpm; $(`.strip[data-deck="${i}"] .bpm`).value = bpm; }
+  send({ type: "deck", i, L, R, rate, name, bpm }, R && R !== L ? [L.buffer] : [L.buffer]);
+  drawWaveform(i, L);
+  if (!bpm) runBpmEstimate(i, L, rate);
+}
+
+function loadDemo(i, kind) {
+  const loop = makeLoop(kind, 124, ctx.sampleRate, 4);
+  const L = loop.L, R = new Float32Array(L);
+  setDeckAudio(i, L, R, loop.sr, loop.name, loop.bpm);
+}
+
+async function loadFile(i, file) {
+  const buf = await ctx.decodeAudioData(await file.arrayBuffer());
+  const L = new Float32Array(buf.getChannelData(0));
+  const R = new Float32Array(buf.numberOfChannels > 1 ? buf.getChannelData(1) : buf.getChannelData(0));
+  setDeckAudio(i, L, R, buf.sampleRate, file.name.replace(/\.[^.]+$/, ""), 0);
+  log(`deck ${i + 1}: loaded ${file.name} (${buf.duration.toFixed(1)}s)`);
+}
+
+// ---- pads -----------------------------------------------------------------------------------
+const padsEl = $("#pads");
+const padNames = Array(PADS).fill("");
+let chromPad = 4;
+for (let r = 0; r < 4; r++) {
+  for (let c = 0; c < 4; c++) {
+    const j = r * 4 + c;
+    const el = document.createElement("div");
+    el.className = "pad";
+    el.dataset.pad = j;
+    el.innerHTML = `<b>${j + 1}</b><span class="pn"></span><kbd>${KEYS[j].toUpperCase()} · ${noteName(36 + j)}</kbd>`;
+    const down = (e) => { e.preventDefault(); noteOn(36 + j, 110); };
+    const up = () => noteOff(36 + j);
+    el.addEventListener("pointerdown", down);
+    el.addEventListener("pointerup", up);
+    el.addEventListener("pointerleave", up);
+    padsEl.appendChild(el);
+    for (const sel of ["#capPad", "#chromPad"]) {
+      const o = document.createElement("option"); o.value = j; o.textContent = `pad ${j + 1}`; $(sel).appendChild(o);
+    }
+  }
+}
+$("#capPad").value = 5;
+$("#chromPad").value = chromPad;
+$("#chromPad").addEventListener("change", (e) => { chromPad = +e.target.value; send({ type: "global", key: "chromaticPad", value: chromPad }); renderPads(); });
+$("#samplerGain").addEventListener("input", (e) => { e.target.nextElementSibling.textContent = (+e.target.value).toFixed(2); send({ type: "global", key: "samplerGain", value: +e.target.value }); });
+$("#capGo").addEventListener("click", () => {
+  const deck = +$("#capDeck").value;
+  if (!deckState[deck].bpm) log(`sample: deck ${deck + 1} has no BPM set — capture-frames falls back to 120`);
+  send({ type: "capture", j: +$("#capPad").value, deck, beats: +$("#capBeats").value });
+});
+function renderPads(state) {
+  padsEl.querySelectorAll(".pad").forEach((el) => {
+    const j = +el.dataset.pad;
+    if (state) padNames[j] = state.pads[j].len ? state.pads[j].name : "";
+    $(".pn", el).textContent = padNames[j];
+    el.classList.toggle("loaded", !!padNames[j]);
+    el.classList.toggle("chrom", j === chromPad);
+  });
+}
+function flashPad(note) {
+  const j = note - 36;
+  const el = padsEl.querySelector(`[data-pad="${j}"]`);
+  if (!el) return;
+  el.classList.add("hit");
+  setTimeout(() => el.classList.remove("hit"), 110);
+}
+function noteOn(note, vel, ch = 0) { send({ type: "midi", data: [0x90 | ch, note, vel] }); flashPad(note); }
+function noteOff(note, ch = 0) { send({ type: "midi", data: [0x80 | ch, note, 0] }); }
+
+const held = new Set();
+window.addEventListener("keydown", (e) => {
+  if (e.target.tagName === "INPUT" || e.target.tagName === "SELECT" || e.repeat) return;
+  const j = KEYS.indexOf(e.key.toLowerCase());
+  if (j >= 0) { held.add(j); noteOn(36 + j, e.shiftKey ? 60 : 110); }
+});
+window.addEventListener("keyup", (e) => {
+  const j = KEYS.indexOf(e.key.toLowerCase());
+  if (j >= 0 && held.delete(j)) noteOff(36 + j);
+});
+
+// ---- Web MIDI -------------------------------------------------------------------------------
+let midiAccess = null, midiInput = null;
+async function initMidi() {
+  if (!navigator.requestMIDIAccess) { $("#midiStatus").textContent = "Web MIDI not supported in this browser (pads + keyboard still work)"; return; }
+  try {
+    midiAccess = await navigator.requestMIDIAccess();
+  } catch (err) {
+    $("#midiStatus").textContent = "MIDI access denied"; return;
+  }
+  const refresh = () => {
+    const sel = $("#midiIn"), prev = sel.value;
+    sel.innerHTML = `<option value="">(none)</option>`;
+    for (const inp of midiAccess.inputs.values()) {
+      const o = document.createElement("option"); o.value = inp.id; o.textContent = inp.name; sel.appendChild(o);
+    }
+    if ([...midiAccess.inputs.keys()].includes(prev)) sel.value = prev;
+    else if (midiAccess.inputs.size) { sel.value = [...midiAccess.inputs.keys()][0]; bindMidi(sel.value); }
+    $("#midiStatus").textContent = `${midiAccess.inputs.size} MIDI input(s)`;
+  };
+  midiAccess.onstatechange = refresh;
+  refresh();
+}
+function bindMidi(id) {
+  if (midiInput) midiInput.onmidimessage = null;
+  midiInput = id ? midiAccess.inputs.get(id) : null;
+  if (midiInput) midiInput.onmidimessage = (ev) => {
+    const [s, d1, d2] = ev.data;
+    if (s >= 0xf0) return;
+    send({ type: "midi", data: [s, d1, d2] });
+    if ((s & 0xf0) === 0x90 && d2 > 0) flashPad(d1);
+  };
+}
+$("#midiIn").addEventListener("change", (e) => bindMidi(e.target.value));
+
+// ---- boot -----------------------------------------------------------------------------------
+$("#playAll").addEventListener("click", () => {
+  const anyStopped = deckState.some((d) => d.len && !d.playing);
+  for (let i = 0; i < DECKS; i++) if (deckState[i].len) { send({ type: "seek", i, pos: 0 }); setPlaying(i, anyStopped); }
+});
+
+$("#start").addEventListener("click", async () => {
+  $("#start").disabled = true;
+  ctx = new AudioContext({ latencyHint: "interactive" });
+  const wasm = await (await fetch("dsp.wasm")).arrayBuffer();
+  dsp = instantiateDsp(wasm);
+  await ctx.audioWorklet.addModule("dsp-worklet.js");
+  node = new AudioWorkletNode(ctx, "mixforge-processor", { outputChannelCount: [2], processorOptions: { wasm } });
+  node.connect(ctx.destination);
+  node.port.onmessage = (ev) => {
+    const m = ev.data;
+    if (m.type === "state") updateUi(m.state);
+    else if (m.type === "captured") log(`sampled ${m.frames} frames into pad ${m.j + 1}`);
+    else if (m.type === "midiEvent") {
+      const e = m.event;
+      if (e.kind === "note-on") log(`note-on ${noteName(e.note)} vel ${e.velocity} -> ${e.pad >= 0 ? "pad " + (e.pad + 1) : "chromatic pad " + (chromPad + 1)}`);
+      else if (e.kind === "cc") log(`CC${e.cc}=${e.value} deck ${e.deck + 1} -> ${["fader","pan","filter","crossfader","pitch","trim"][e.param] || "unmapped"}`);
+      else if (e.kind === "bend") log(`bend ${e.value}`);
+    }
+  };
+  // Deck 1 stays empty until the room hands it a track; decks 2-4 get demo loops so there's
+  // always something to practice/sample with locally.
+  DEMO.slice(1).forEach((k, idx) => { const i = idx + 1; loadDemo(i, k); send({ type: "deckParam", i, key: "assign", value: ASSIGN_DEFAULT[i] }); });
+  send({ type: "deckParam", i: 0, key: "assign", value: ASSIGN_DEFAULT[0] });
+  makeKit(ctx.sampleRate).forEach((p, j) => {
+    const L = new Float32Array(p.L);
+    send({ type: "pad", j, L, R: L, rate: ctx.sampleRate, opts: { name: p.name, oneShot: p.oneShot, root: p.root || 60, attack: p.attack ?? 0.002, decay: p.decay ?? 0.05, sustain: p.sustain ?? 1, release: p.release ?? 0.08 } }, [L.buffer]);
+  });
+  send({ type: "global", key: "chromaticPad", value: chromPad });
+  $("#dspStatus").textContent = `dsp.wasm: ${Object.keys(dsp).filter((k) => typeof dsp[k] === "function").length} PARENA exports @ ${ctx.sampleRate} Hz`;
+  $("#overlay").remove();
+  initMidi();
+  if (pendingPlay) { const p = pendingPlay; pendingPlay = null; handlePlay(p); }
+});
+
+function updateUi(s) {
+  s.decks.forEach((d, i) => {
+    $(".meter > div", $(`.strip[data-deck="${i}"]`)).style.width = `${Math.min(100, d.peak * 100)}%`;
+    redrawWave(i, d.len ? d.pos / d.len : 0);
+    if (!d.playing && deckState[i].playing) setPlaying(i, false);
+  });
+  $("#mL > div").style.width = `${Math.min(100, s.masterPeakL * 100)}%`;
+  $("#mR > div").style.width = `${Math.min(100, s.masterPeakR * 100)}%`;
+  $("#voices").textContent = `voices: ${s.voices}/16`;
+  renderPads(s);
+}
+renderPads();
+</script>
+</body>
+</html>

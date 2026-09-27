@@ -24,11 +24,18 @@
 Description=MIXFORGE DJ-room server (real WebSocket seat/turn state)
 After=network-online.target
 
+# Real, room-track download env vars (2026-09-27 Phase 5 follow-through -- see NORTHSTAR.md):
+#   MIXFORGE_YTDLP_BIN     -- override the yt-dlp binary path (default: ~/.local/bin/yt-dlp)
+#   MIXFORGE_YTDLP_COOKIES -- a Netscape-format cookies.txt path, works around YouTube's own
+#                             real, found-live bot-detection wall on this server's IP. Unset by
+#                             default -- downloads that hit the wall fail with an honest
+#                             queue_failed message in the room UI, not a silent hang.
 [Service]
 Type=simple
 WorkingDirectory=/home/fatbaby/MIXFORGE/server
 Environment=PORT=8973
 Environment=HOST=127.0.0.1
+Environment=MIXFORGE_YTDLP_COOKIES=/home/fatbaby/MIXFORGE/var/ytdlp-cookies.txt
 ExecStart=/usr/bin/node room_server.mjs
 Restart=on-failure
 RestartSec=10s

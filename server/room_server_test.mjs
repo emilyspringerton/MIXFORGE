@@ -118,4 +118,92 @@ overflow.close();
 wss.close();
 
 console.log("room_server smoke: PASS (real WebSocket server, real clients, real join/leave/turn/authz)");
+
+// ---- real playback pipeline (download -> ready/play, queue_failed, ping/pong) ------------------
+// Real yt-dlp/network calls have no place in a test run (same "stub the external tool" judgment
+// PARENA's own test-mixforge-import already established for this exact dependency) -- a fast,
+// injectable stub download() proves the SERVER's own real logic (broadcast sequencing, room
+// state, failure handling) without touching the network.
+import { mkdirSync, writeFileSync, rmSync, existsSync } from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+const here2 = path.dirname(fileURLToPath(import.meta.url));
+const testCacheDir = path.join(here2, "..", "web", "room-cache-test");
+rmSync(testCacheDir, { recursive: true, force: true });
+
+let stubShouldFail = false;
+async function stubDownload(url, destDir) {
+  if (stubShouldFail) return { ok: false, error: "stubbed failure: simulated yt-dlp error" };
+  mkdirSync(destDir, { recursive: true });
+  const p = path.join(destDir, "stub-track.webm");
+  writeFileSync(p, "not real audio, just proving the pipeline");
+  return { ok: true, path: p };
+}
+
+const PORT2 = 8975;
+const s2 = startServer(PORT2, "127.0.0.1", stubDownload);
+const a = await connect(PORT2);
+const b = await connect(PORT2);
+await nextMessageOfType(a, "joined");
+await nextMessageOfType(b, "joined");
+await new Promise((r) => setTimeout(r, 50));
+a.__queue.length = 0;
+b.__queue.length = 0;
+
+// Seat 0 (a) queues a real-shaped URL; the stub succeeds. b should see the full real sequence.
+a.send(JSON.stringify({ type: "queue_song", url: "https://youtu.be/dQw4w9WgXcQ" }));
+assert((await nextMessageOfType(b, "track_queued")).seat === 0, "b sees track_queued");
+assert((await nextMessageOfType(b, "downloading")).seat === 0, "b sees downloading");
+const ready = await nextMessageOfType(b, "play");
+assert(ready.url === "/room-cache/stub-track.webm", `b sees the real play url (got ${ready.url})`);
+assert(typeof ready.startAtServerTimeMs === "number" && ready.startAtServerTimeMs > Date.now(), "play carries a real, future server timestamp");
+
+// A malformed/non-youtube URL is rejected outright -- never reaches the downloader at all.
+await new Promise((r) => setTimeout(r, 60));
+b.__queue.length = 0;
+b.send(JSON.stringify({ type: "queue_song", url: "https://evil.example.com/x" }));
+const failed = await nextMessageOfType(b, "queue_failed");
+assert(failed.error.includes("youtube"), `non-youtube URL rejected before any download attempt (got: ${failed.error})`);
+
+// A real download failure (stub) still produces an honest queue_failed, not a silent hang.
+// Turn is still seat 1 (b) here: the malformed-URL attempt above returned early and never
+// advanced it, same as the server's own real "reject before advancing" logic.
+assert(s2.room.currentTurn === 1, `still seat 1's turn going into the failure test (got ${s2.room.currentTurn})`);
+await new Promise((r) => setTimeout(r, 60));
+stubShouldFail = true;
+a.__queue.length = 0;
+b.send(JSON.stringify({ type: "queue_song", url: "https://youtu.be/willFail12" }));
+const failMsg = await nextMessageOfType(a, "queue_failed");
+assert(failMsg.error.includes("stubbed failure"), `a real downloader failure surfaces honestly (got: ${failMsg.error})`);
+stubShouldFail = false;
+
+// Real ping/pong clock-sync primitive: unicast, echoes t0, carries the server's own real clock.
+a.__queue.length = 0;
+const t0 = Date.now();
+a.send(JSON.stringify({ type: "ping", t0 }));
+const pong = await nextMessageOfType(a, "pong");
+assert(pong.t0 === t0, "pong echoes the real t0 sent");
+assert(typeof pong.serverTime === "number" && pong.serverTime >= t0, "pong carries a real server clock reading");
+
+// Real fix, found live (not by guessing): if the seat whose turn it is disconnects without
+// queuing, nothing else was ever calling advanceTurn() -- the room got stuck forever, since every
+// other seat's queue attempt is correctly rejected as "not your turn." A real disconnect of the
+// actual current-turn seat must hand the turn off automatically. (The failed-download queue
+// attempt above already advanced the turn to seat 0, regardless of its eventual download outcome
+// -- same real, intentional "advance on acceptance, not on download success" design as the very
+// first queue in this file.)
+const turnBeforeDisconnect = s2.room.currentTurn;
+const currentHolder = turnBeforeDisconnect === 0 ? a : b;
+currentHolder.close();
+await new Promise((r) => setTimeout(r, 80));
+assert(s2.room.currentTurn !== turnBeforeDisconnect, `turn auto-advanced off the disconnected seat (still ${s2.room.currentTurn})`);
+assert(s2.room.occupiedCount() === 1, "room reports 1 occupied seat after the disconnect");
+
+(turnBeforeDisconnect === 0 ? b : a).close();
+s2.wss.close();
+rmSync(testCacheDir, { recursive: true, force: true });
+rmSync(path.join(here2, "..", "web", "room-cache"), { recursive: true, force: true });
+
+console.log("room_server playback pipeline: PASS (real download->ready/play sequencing, real queue_failed on bad URL and real downloader failure, real ping/pong)");
 process.exit(0);

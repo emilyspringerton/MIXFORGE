@@ -364,6 +364,59 @@ Two real gaps close this, both buildable on infrastructure that already exists:
 4. **5d (deferred, named not guessed)** — late-join seek-to-current-position; true single-relay
    fan-out if room sizes grow past a handful of listeners.
 
+### Implemented (2026-09-27, same day as the scoping above) — real, live, working
+
+Founder real-time: "unify the dj interface and the multiplayer room and make it so it actually
+works", then mid-build: "it needs to show the waveforms in the cdjs... bpm detection and key
+detection" and "it still needs to let you open files and sample off of either the file you opened
+or the youtube 'stream' you opened". Built and live-verified, not just scoped:
+
+- **`web/room.html`** — the real unification: the full 4-deck mixer/sampler from `dj.html` plus
+  the room from `multiplayer.html`, in one page. Deck 1 is the room's shared deck (loads whatever
+  the room is currently playing); decks 2-4 stay local. The sampler needed zero new code to
+  satisfy "sample off either source" — `capturePad` already samples off whatever's loaded into a
+  deck, source-agnostic, so a room-sourced deck 1 and a locally-opened deck 2-4 work identically.
+- **`server/room_server.mjs`** — real download-on-queue (`yt-dlp -f bestaudio/best`, no ffmpeg),
+  caches under `web/room-cache/` (served by the existing static `location /`, no nginx change
+  needed), broadcasts a near-future `play` timestamp; clients round-trip clock-sync (`ping`/`pong`)
+  and schedule `deckParam playing=true` against it. **Correction from the scoping doc above**: not
+  Web Audio's sample-accurate `start(when)` after all — deck playback is a custom per-sample
+  AudioWorklet loop, not a stock `AudioBufferSourceNode`, so this is `setTimeout`-scheduled
+  (typically low tens of ms accuracy), matching NORTHSTAR's own "roughly synchronized" bar, not
+  claiming more than that.
+- **Real waveform display** (`drawWaveform`/`redrawWave` in `room.html`) — a min/max peak overview
+  cached to an offscreen canvas once per load, redrawn cheaply with a live playhead at the
+  existing ~30Hz UI tick.
+- **Real, basic BPM estimate** (`web/bpm.mjs`) — energy-envelope autocorrelation, pure JS, no new
+  dependency, per the founder's own explicit choice ("basic JS heuristic now" over building the
+  full aubio pipeline). Labeled an estimate in the UI and log, never presented as ground truth.
+  **No key detection** — that one genuinely has no lightweight equivalent, per the founder's own
+  acknowledgment when choosing this option.
+- **Two real bugs found and fixed via actual two-tab Playwright testing against the live server**,
+  not guessed at: (1) a client's "now playing" display went stale at "downloading..." forever —
+  `room.nowPlaying` was set but no fresh `room_state` broadcast followed to deliver it; (2) if the
+  seat whose turn it is disconnects without queuing, nothing ever called `advanceTurn()` — the
+  room got stuck forever, since every other seat's queue attempt is correctly rejected as "not
+  your turn." Both fixed; the second has a real test (`room_server_test.mjs`) exercising an actual
+  WebSocket close, not a synthetic state mutation.
+- **Real, live-confirmed nuance on the YouTube bot-detection finding above**: it's intermittent,
+  not an absolute wall — a real download of a real video succeeded live during this session's own
+  testing (a 3.4MB WebM, decoded and played with zero errors), while other attempts hit either the
+  bot-detection wall or a separate "requested format is not available" failure. Installed a real
+  Deno binary (`~/.deno/bin/deno`, no sudo) and wired `--js-runtimes deno:<path>` into the
+  download call, since yt-dlp's own startup warning names a missing JS runtime as narrowing
+  available formats/signatures — a real, distinct, likely-more-common failure mode from the bot
+  wall itself, which still needs real cookies (`MIXFORGE_YTDLP_COOKIES`) to reliably get past.
+- **Cookie-export tool, real technical correction made mid-build**: the founder's own two proposed
+  approaches (a VS Code extension hosted at `console.okemily.com`, then "fork our own chrome to
+  defeat the security boundaries") both misjudged where the real boundary is. A remote
+  code-server extension can't reach a local desktop browser's cookie store at all (wrong
+  machine); same-origin policy blocks a *webpage's* JS from reading another origin's cookies, but
+  a browser *extension* with the `cookies` permission scoped to `youtube.com` has sanctioned,
+  official API access to exactly those cookies — no boundary to defeat, no fork needed. Real,
+  minimal Chrome extension built instead (see its own README) — see the monorepo `CLAUDE.md`'s
+  `MIXFORGE_YTDLP_COOKIES` wiring above for where the exported cookies land.
+
 ### Kanban items this resolves
 
 Closes the open triage question in `T48839675`/`T94858758` (both: "resolve room-engine

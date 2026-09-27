@@ -255,6 +255,35 @@ step: either Phase 5 (`media/stream.prn`) scoping, since it's the real remaining
 anyone actually hearing what gets queued, or IDUNA identity integration, matching the same
 guest-auth pattern DEADWEIGHT/ECOWAR/SLOWBOT_LEAGUE already established — not decided here.
 
+## Update 2026-09-27: real 4-track mixing + MIDI sampling (PARENA DSP -> WASM)
+
+Founder real-time: "continue building MIXFORGE DJ game in PARENA primatives the actual dj game
+should have real 4 track mixing and midi sampling." Built as the solo DJ surface the room will
+later host, on the same PARENA-WASM stack the room pivot chose:
+
+- `PARENA/stdlib/mixforge/mixer.prn` — the 4-channel DJ mixer's math: cubic fader taper,
+  equal-power pan and crossfader (polynomial quarter-cosine, < 3e-5 from `cos`; there is no libm on
+  the WASM target), mute/solo, A/Thru/B crossfader assign, one-knob low-/high-pass DJ filter,
+  pitch-fader tempo, beatmatch rate, soft-clipping summing bus, meter ballistics.
+- `PARENA/stdlib/mixforge/sampler.prn` — MIDI 1.0 decoding (note on/off incl. velocity-0, CC,
+  14-bit pitch bend), 16-pad map on notes 36–51, exact 12-TET note→rate (semitone × octave
+  tables, no pow), bend rate (< 1 cent), velocity curve, CC→mixer map, interpolation, ADSR, and
+  beat-synced capture length.
+- `web/engine.mjs` (host: buffers, voices, frame loop), `web/dsp-worklet.js` (AudioWorklet),
+  `web/dj.html` (4 strips, master, 16 pads, Web MIDI, keyboard pads, capture-to-pad), `web/
+  render_demo.mjs` (offline WAV render), `web/dsp_test.mjs` (49 checks incl. Goertzel-measured
+  audio assertions).
+
+This resequences the plan: Phase 2 (crossfade) is done in the browser and exceeds its bar (4
+decks, not 2), without `stdlib/media/audio.prn` — Web Audio is the device layer, PARENA is the
+DSP. Two real LLVM-backend bugs found and fixed in PARENA along the way (`src/emit_llvm.c`: F64
+literal operands on the left of an op were typed I32; function bodies over 512 bytes were
+silently truncated), with regression tests.
+
+Still open, named: BPM/key detection (Phase 3 — BPM is typed in today), keylock/time-stretch
+(Phase 4), wiring the mixer into the room (a DJ's master out → room listeners, Phase 5 streaming),
+and a test with a physical MIDI controller (only headless Chromium + synthetic MIDI so far).
+
 ## Golden doc registration
 
 Registered in `EMILY/context/golden-docs-index.md` as `MIXFORGE-NORTH` per S205-101's own

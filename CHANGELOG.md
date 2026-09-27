@@ -1,5 +1,19 @@
 # Changelog
 
+## 2026-09-27
+
+- feat: real 4-track DJ mixing + 16-pad MIDI sampling, DSP in PARENA compiled to WASM (founder
+  real-time: "the actual dj game should have real 4 track mixing and midi sampling"). New
+  `PARENA/stdlib/mixforge/mixer.prn` + `sampler.prn` -> `web/dsp.wasm` (`scripts/
+  build_dsp_wasm.sh`); `web/engine.mjs` host, `web/dsp-worklet.js` AudioWorklet, `web/dj.html`
+  game UI (4 decks with demo loops or local files, trim/filter/pan/fader/mute/solo/xfade-assign,
+  crossfader, master, sync; 16 velocity pads, chromatic pad, pitch bend, beat-synced capture off a
+  deck, Web MIDI + keyboard), `web/render_demo.mjs` offline WAV render, `web/dsp_test.mjs` 49
+  checks (kernel accuracy + Goertzel-measured rendered audio), mutation-checked. Headless
+  Chromium run: no console errors, meters/pads/capture work. README rewritten (was empty) as
+  `README.md`; CLAUDE.md "blocked on stdlib/media" claim corrected; NORTHSTAR update added.
+  Not yet: BPM/key detection, keylock, room audio sync, a physical MIDI controller test.
+
 ## 2026-09-22 (3)
 
 - feat: real DJ-room server (founder real-time, kanban T46478755: "build the DJ-room server --

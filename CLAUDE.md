@@ -22,16 +22,20 @@ live-verified (`make test-mixforge-import` in PARENA). **Real CLI shipped 2026-0
 the real, generated `import_track` (committed at `generated/mixforge_gen.c`), and appends a real
 NDJSON line to `tracks/library.ndjson`. Live-verified with the same yt-dlp-stub technique
 `test_mixforge_import.c` established. Still open, honestly named: metadata lands as NDJSON
-rather than a queryable SQLite store, and playback/crossfade + key/BPM detection are both
-blocked on real, separate PARENA-side stdlib work that doesn't exist yet — see `NORTHSTAR.md`'s
+rather than a queryable SQLite store, playback/mixing now works in the browser (see below), while key/BPM detection is
+still blocked on real, separate PARENA-side work that doesn't exist yet — see `NORTHSTAR.md`'s
 own "In scope (V0)" section for the exact remaining slice.
 
 ## Real, current dependency (checked directly, not assumed)
 
-`PARENA/stdlib/media/` does not exist yet — `STDLIB.md` §26-28 is a resolved API-surface design
-(FFI-bind real libraries) but zero `.prn` implementation. MIXFORGE's own Phase 1 (two-deck
-crossfade) cannot start until that lands. See `NORTHSTAR.md`'s own "Real, current blocker"
-section for the full detail.
+**Updated 2026-09-27**: real 4-deck mixing + a 16-pad MIDI sampler now exist in the browser
+(`web/dj.html`) without waiting on `PARENA/stdlib/media/` — the DSP kernels are PARENA
+(`stdlib/mixforge/mixer.prn`, `sampler.prn`) compiled to `web/dsp.wasm` via
+`scripts/build_dsp_wasm.sh`, and the browser's Web Audio API is the audio I/O. `stdlib/media/`
+(still design-only) is only needed now for a native, non-browser playback path. Rebuild
+`web/dsp.wasm` whenever either `.prn` changes; `web/dsp_test.mjs` must pass (the build script
+runs it). The LLVM->WASM backend is scalar-only with `if` lowered to `select` (both branches
+evaluated): keep kernels non-recursive and total. See `README.md` for what works and its limits.
 
 ## Related Repos
 

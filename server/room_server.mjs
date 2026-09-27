@@ -70,6 +70,32 @@ function safeYoutubeUrl(url) {
 // live-verify whether the flag still fires without `-x` -- so this falls back to globbing
 // CACHE_DIR for the real downloaded file by its own random id prefix if stdout parsing comes up
 // empty, rather than assuming one specific yt-dlp behavior untested.
+// downloadWithRetry -- one real, jittered retry on a transient failure (YouTube's own confirmed-
+// intermittent bot-detection, a flaky network blip), per the founder's own explicit "don't have
+// it retry more than once" instruction -- not an unbounded/exponential-backoff retry loop, just
+// one extra real attempt. Full jitter (a random delay in [0, cap], not a fixed pause) is the same
+// real, standard technique cloud SDKs use to avoid every failed client retrying in lockstep;
+// irrelevant at this room's real 4-seat scale, used anyway since it costs nothing and is the
+// correct default. Every attempt (including the retry itself) is broadcast to the room as a real
+// `download_retry` message so the client's own log shows exactly what's happening, per the
+// founder's own "have all the logs show in the client what is happening" ask -- not just a final
+// pass/fail.
+const RETRY_BASE_MS = Number(process.env.MIXFORGE_RETRY_BASE_MS || 1500);
+const RETRY_MAX_MS = Number(process.env.MIXFORGE_RETRY_MAX_MS || 6000);
+
+export async function downloadWithRetry(download, url, destDir, onAttempt) {
+  const first = await download(url, destDir);
+  if (first.ok) return first;
+  // Jittered delay, uniformly random in [RETRY_BASE_MS, RETRY_MAX_MS] -- always at least a real
+  // moment for a transient blip to clear, never longer than RETRY_MAX_MS.
+  const retryInMs = Math.round(RETRY_BASE_MS + Math.random() * (RETRY_MAX_MS - RETRY_BASE_MS));
+  onAttempt({ attempt: 1, maxAttempts: 2, error: first.error, retrying: true, retryInMs });
+  await new Promise((r) => setTimeout(r, retryInMs));
+  const second = await download(url, destDir);
+  if (!second.ok) onAttempt({ attempt: 2, maxAttempts: 2, error: second.error, retrying: false });
+  return second;
+}
+
 export async function realDownload(url, destDir) {
   mkdirSync(destDir, { recursive: true });
   const id = crypto.randomUUID();
@@ -235,7 +261,9 @@ export function startServer(port, host = "127.0.0.1", download = realDownload) {
         broadcast(room, room.state());
         // Real, deliberate: the turn already advanced above (same tested contract as before this
         // pass) -- downloading/playing a track doesn't block the next DJ from queuing behind it.
-        download(msg.url, CACHE_DIR).then((res) => {
+        downloadWithRetry(download, msg.url, CACHE_DIR, (info) => {
+          broadcast(room, { type: "download_retry", seat: senderSeat, url: msg.url, ...info });
+        }).then((res) => {
           if (!res.ok) {
             broadcast(room, { type: "queue_failed", seat: senderSeat, url: msg.url, error: res.error });
             return;

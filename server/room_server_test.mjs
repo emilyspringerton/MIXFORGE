@@ -166,7 +166,10 @@ b.send(JSON.stringify({ type: "queue_song", url: "https://evil.example.com/x" })
 const failed = await nextMessageOfType(b, "queue_failed");
 assert(failed.error.includes("youtube"), `non-youtube URL rejected before any download attempt (got: ${failed.error})`);
 
-// A real download failure (stub) still produces an honest queue_failed, not a silent hang.
+// A real download failure (stub) retries exactly once (real, jittered delay -- MIXFORGE_RETRY_*
+// env vars are set tiny by package.json's own test script so this stays fast), then produces an
+// honest queue_failed if the retry also fails -- not a silent hang, and not more than one retry
+// (founder real-time: "dont have it retry more than once").
 // Turn is still seat 1 (b) here: the malformed-URL attempt above returned early and never
 // advanced it, same as the server's own real "reject before advancing" logic.
 assert(s2.room.currentTurn === 1, `still seat 1's turn going into the failure test (got ${s2.room.currentTurn})`);
@@ -174,8 +177,14 @@ await new Promise((r) => setTimeout(r, 60));
 stubShouldFail = true;
 a.__queue.length = 0;
 b.send(JSON.stringify({ type: "queue_song", url: "https://youtu.be/willFail12" }));
+const retryMsg = await nextMessageOfType(a, "download_retry");
+assert(retryMsg.attempt === 1 && retryMsg.maxAttempts === 2 && retryMsg.retrying === true, `first attempt reported as a real, single retry (got ${JSON.stringify(retryMsg)})`);
+assert(retryMsg.error.includes("stubbed failure"), `retry message carries the real first-attempt error (got: ${retryMsg.error})`);
+assert(typeof retryMsg.retryInMs === "number" && retryMsg.retryInMs > 0, "retry message carries a real, positive jittered delay");
+const retryMsg2 = await nextMessageOfType(a, "download_retry");
+assert(retryMsg2.attempt === 2 && retryMsg2.retrying === false, `second (final) attempt reported, not retried again (got ${JSON.stringify(retryMsg2)})`);
 const failMsg = await nextMessageOfType(a, "queue_failed");
-assert(failMsg.error.includes("stubbed failure"), `a real downloader failure surfaces honestly (got: ${failMsg.error})`);
+assert(failMsg.error.includes("stubbed failure"), `a real downloader failure surfaces honestly after exactly one retry (got: ${failMsg.error})`);
 stubShouldFail = false;
 
 // Real ping/pong clock-sync primitive: unicast, echoes t0, carries the server's own real clock.

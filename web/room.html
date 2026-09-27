@@ -185,6 +185,13 @@ ws.onmessage = (ev) => {
   } else if (msg.type === "downloading") {
     log(`downloading seat ${msg.seat + 1}'s track… (real yt-dlp download, needs a moment)`);
     $("#nowPlaying").textContent = `downloading seat ${msg.seat + 1}'s track…`;
+  } else if (msg.type === "download_retry") {
+    if (msg.retrying) {
+      log(`download attempt ${msg.attempt}/${msg.maxAttempts} failed for seat ${msg.seat + 1}'s track: ${msg.error} -- retrying in ${(msg.retryInMs / 1000).toFixed(1)}s`);
+      $("#nowPlaying").textContent = `download failed once, retrying seat ${msg.seat + 1}'s track in ${(msg.retryInMs / 1000).toFixed(1)}s…`;
+    } else {
+      log(`retry attempt ${msg.attempt}/${msg.maxAttempts} also failed for seat ${msg.seat + 1}'s track: ${msg.error}`);
+    }
   } else if (msg.type === "queue_failed") {
     log(`queue failed: ${msg.error}`);
     $("#nowPlaying").textContent = `queue failed: ${msg.error}`;

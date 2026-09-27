@@ -416,6 +416,22 @@ or the youtube 'stream' you opened". Built and live-verified, not just scoped:
   official API access to exactly those cookies — no boundary to defeat, no fork needed. Real,
   minimal Chrome extension built instead (see its own README) — see the monorepo `CLAUDE.md`'s
   `MIXFORGE_YTDLP_COOKIES` wiring above for where the exported cookies land.
+- **One real retry (jittered), full visibility in the client log**: founder real-time, "can we
+  give a jitter retry like when it denies have it retry have all the logs show in the client what
+  is happening", then "dont have it retry more than once" -- `downloadWithRetry` in
+  `room_server.mjs` does exactly one retry after a random jittered delay (uniform in
+  `[MIXFORGE_RETRY_BASE_MS, MIXFORGE_RETRY_MAX_MS]`, default 1.5-6s), broadcasting a real
+  `download_retry` message for both the failing first attempt and, if it also fails, the final
+  attempt, so the room's log shows the exact real sequence rather than a single opaque
+  `queue_failed`. Live-verified against a real, guaranteed-to-fail `youtube.com` URL.
+- **Found live, not a code bug: the root domain wasn't actually unified.** Founder real-time,
+  "it still doesnt work not unified ensure deploy" -- the DEPLOY was fine (the server was running
+  the latest code, verified), but `mixforge.okemily.com/` still served the original standalone
+  `room.wasm` compiler-pipeline proof as `index.html`, with `room.html` merely one of three links
+  buried below it -- a real UX gap, not a bug in anything shipped so far. Fixed: that original
+  proof page moved to `web/wasm-proof.html` (preserved as-is, still linked from `room.html`),
+  `index.html` is now a plain redirect straight to `room.html`, so the bare domain IS the real,
+  unified room with no extra click.
 
 ### Kanban items this resolves
 

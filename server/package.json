@@ -7,7 +7,7 @@
   "main": "room_server.mjs",
   "scripts": {
     "start": "node room_server.mjs",
-    "test": "node room_server_test.mjs"
+    "test": "MIXFORGE_RETRY_BASE_MS=5 MIXFORGE_RETRY_MAX_MS=15 node room_server_test.mjs"
   },
   "dependencies": {
     "ws": "^8.18.0"

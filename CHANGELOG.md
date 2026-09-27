@@ -1,6 +1,7 @@
 # Changelog
 
 ## 2026-09-27
+- Added one real, jittered retry on download failure with full log visibility in the room client. Fixed a real UX gap found live: the root domain (mixforge.okemily.com/) still served the old standalone compiler-proof page instead of the unified room -- moved that proof to wasm-proof.html and made index.html redirect straight to room.html. (sess-20260923-1030-4a526255)
 - Unified the DJ mixer and multiplayer room into one real, working page (room.html): server-side download-on-queue, clock-synced playback, real waveform display, basic BPM estimate, sampling off either a local file or the room's live track. Two real bugs found and fixed via live two-tab testing. New Chrome extension (tools/cookie-exporter) uploads real YouTube cookies to a new IDUNA endpoint to work around YouTube's own intermittent server-side bot detection. (sess-20260923-1030-4a526255)
 - Phase 5 scoped: synchronized room playback doesn't need media/stream.prn after all -- real architecture is server-side download-on-queue (reusing the mixforge CLI) + nginx static serve + client clock-sync + Web Audio scheduled start; also fixed real nginx repo/live config drift (certbot's SSL additions) (sess-20260923-1030-4a526255)
 

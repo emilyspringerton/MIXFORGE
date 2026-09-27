@@ -1,0 +1,45 @@
+# MIXFORGE
+
+A real-time DJ mixing application, built PARENA-native. See `NORTHSTAR.md` for the full scoping
+pass and phased plan, `CLAUDE.md` for the working-in-this-repo guide.
+
+## Live
+
+`mixforge.okemily.com` — a real, live DJ-room demo: open the page in a few browser tabs and each
+one takes a real seat in the room. Turn order and seat validity are computed by real,
+PARENA-compiled-to-WASM logic (`web/room.wasm`, from `PARENA/stdlib/mixforge/room.prn`); seat
+occupancy and "whose turn" broadcasts are a real Node/WebSocket server
+(`server/room_server.mjs`) that calls the exact same `room.wasm` rather than a second
+hand-rolled copy of the turn-order math.
+
+Honest limits, as of 2026-09-27: no audio playback yet (blocked on `PARENA/stdlib/media/audio.prn`
+and `media/codec.prn`, both design-only — see `NORTHSTAR.md`'s "Real, current blocker"), no
+track-queue persistence (a queued URL is broadcast and forgotten, not stored), and no auth/
+identity (a seat is just a WebSocket connection, not an IDUNA account).
+
+## Running it locally
+
+```bash
+cd server && npm install && npm test    # real WebSocket integration test (join/leave/turn/authz)
+node room_server.mjs                    # starts the real server on ws://127.0.0.1:8973
+```
+
+Then open `web/multiplayer.html` through any static file server that also proxies `/ws` to
+`127.0.0.1:8973` (see `ops/nginx/mixforge-okemily.conf` for the real production config — or just
+`sudo cp` it locally and point `server_name` at `localhost`). `web/index.html` is a standalone
+version with no server dependency — it loads `room.wasm` directly and only demonstrates
+turn-order math, no real multiplayer.
+
+## Deploying
+
+`ops/nginx/mixforge-okemily.conf` + `ops/systemd/mixforge-room-server.service` +
+`IDUNA/ops/terraform/main.tf` (`cloudflare_dns_record.mixforge`) are the full, real deploy —
+see each file's own header comment and `sudo-queue/92-mixforge-okemily-domain.sh` for the exact
+commands.
+
+## Track import (separate from the live demo above)
+
+`mixforge import <url> [instrumental-url]` (`src/main.c`) — pastes a YouTube URL, shells out to
+real `yt-dlp`, writes a real NDJSON row to `tracks/library.ndjson`. This is Phase 1 of
+`NORTHSTAR.md`'s plan and doesn't yet connect to the DJ-room demo above; they're currently two
+separate real pieces of code, not one integrated app.

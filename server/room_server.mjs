@@ -108,9 +108,9 @@ export function broadcast(room, msg) {
   }
 }
 
-export function startServer(port) {
+export function startServer(port, host = "127.0.0.1") {
   const room = new Room();
-  const wss = new WebSocketServer({ port });
+  const wss = new WebSocketServer({ port, host });
 
   wss.on("connection", (ws) => {
     const id = crypto.randomUUID();
@@ -150,6 +150,10 @@ export function startServer(port) {
 
 if (import.meta.url === `file://${process.argv[1]}`) {
   const port = Number(process.env.PORT || 8973);
-  startServer(port);
-  console.log(`mixforge room server listening on ws://127.0.0.1:${port} (max ${MAX_SEATS} seats)`);
+  // Loopback-only by default: nginx (ops/nginx/mixforge-okemily.conf) is the real, TLS-terminating
+  // gate in production, same "reverse proxy is the real edge, the app binds 127.0.0.1" split
+  // jewel-jupyter.service/sarena-notebook.service already establish elsewhere in this monorepo.
+  const host = process.env.HOST || "127.0.0.1";
+  startServer(port, host);
+  console.log(`mixforge room server listening on ws://${host}:${port} (max ${MAX_SEATS} seats)`);
 }

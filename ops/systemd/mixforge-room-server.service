@@ -1,0 +1,40 @@
+# MIXFORGE's real DJ-room WebSocket server (seat occupancy, join/leave, turn broadcast) --
+# user-level systemd unit (no sudo required). Founder real-time, 2026-09-27: "lets get MIXFORGE
+# live mixforge.okemily.com".
+#
+# Bound to 127.0.0.1 by default (see server/room_server.mjs's own HOST env var) -- nginx
+# (ops/nginx/mixforge-okemily.conf) is the real, TLS-terminating edge in production, same
+# "reverse proxy is the real gate, the app binds loopback" split jewel-jupyter.service/
+# sarena-notebook.service already establish elsewhere in this monorepo. This process has no auth
+# of its own (see room_server.mjs's own header comment: "no auth/identity yet") -- it is safe to
+# expose through the public vhost only because seats/turns carry no real user identity or
+# persistent data, not because anything here checks a credential.
+#
+# Deploy:
+#   mkdir -p ~/.config/systemd/user
+#   cp ops/systemd/mixforge-room-server.service ~/.config/systemd/user/
+#   systemctl --user daemon-reload
+#   systemctl --user enable --now mixforge-room-server.service
+#
+# NOTE: must stay bound to 127.0.0.1 for the same "nginx is the real gate" reason
+# jewel-jupyter.service's own header comment already states -- never change HOST without also
+# reintroducing a real auth gate here.
+
+[Unit]
+Description=MIXFORGE DJ-room server (real WebSocket seat/turn state)
+After=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/fatbaby/MIXFORGE/server
+Environment=PORT=8973
+Environment=HOST=127.0.0.1
+ExecStart=/usr/bin/node room_server.mjs
+Restart=on-failure
+RestartSec=10s
+StandardOutput=append:/home/fatbaby/EMILY/var/logs/mixforge-room-server.log
+StandardError=append:/home/fatbaby/EMILY/var/logs/mixforge-room-server.log
+MemoryMax=256M
+
+[Install]
+WantedBy=default.target

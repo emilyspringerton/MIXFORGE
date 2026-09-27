@@ -17,10 +17,12 @@
 </head>
 <body>
 <h1>MIXFORGE DJ Room — live server</h1>
-<p>Open this page in several tabs to see real, separate seats join the same room. Connects to
-<code>ws://127.0.0.1:8973</code> (run <code>node server/room_server.mjs</code> first). Turn-order
-and seat validity are computed by the real, same <code>room.wasm</code> the server itself calls
-&mdash; this page never reimplements that logic.</p>
+<p>Open this page in several tabs to see real, separate seats join the same room. Connects back to
+this same host's <code>/ws</code> path (nginx proxies it to the real
+<code>server/room_server.mjs</code> process on <code>127.0.0.1:8973</code> -- see
+<code>ops/nginx/mixforge-okemily.conf</code>). Turn-order and seat validity are computed by the
+real, same <code>room.wasm</code> the server itself calls &mdash; this page never reimplements
+that logic.</p>
 
 <div class="room" id="room"></div>
 <div>
@@ -35,7 +37,12 @@ and seat validity are computed by the real, same <code>room.wasm</code> the serv
     el.textContent += line + "\n";
   };
 
-  const ws = new WebSocket("ws://127.0.0.1:8973");
+  // Relative to whatever host actually served this page (127.0.0.1:8973 in local dev via nginx,
+  // wss://mixforge.okemily.com/ws in production) -- a hardcoded ws://127.0.0.1:8973 only ever
+  // worked when the browser and the server were the same machine, which stopped being true the
+  // moment this page is served from a real domain.
+  const wsProto = location.protocol === "https:" ? "wss:" : "ws:";
+  const ws = new WebSocket(`${wsProto}//${location.host}/ws`);
   let mySeat = -1;
   let lastState = null;
 

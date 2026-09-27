@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-09-27
+
+- Real deploy for mixforge.okemily.com: nginx vhost + systemd unit (running), relative WS URL fix in multiplayer.html, DNS via IDUNA's terraform (sess-20260923-1030-4a526255)
+
+
 ## 2026-09-22 (3)
 
 - feat: real DJ-room server (founder real-time, kanban T46478755: "build the DJ-room server --

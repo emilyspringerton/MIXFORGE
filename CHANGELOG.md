@@ -1,6 +1,7 @@
 # Changelog
 
 ## 2026-09-27
+- Phase 5 scoped: synchronized room playback doesn't need media/stream.prn after all -- real architecture is server-side download-on-queue (reusing the mixforge CLI) + nginx static serve + client clock-sync + Web Audio scheduled start; also fixed real nginx repo/live config drift (certbot's SSL additions) (sess-20260923-1030-4a526255)
 
 - feat: real 4-track DJ mixing + 16-pad MIDI sampling, DSP in PARENA compiled to WASM (founder
   real-time: "the actual dj game should have real 4 track mixing and midi sampling"). New

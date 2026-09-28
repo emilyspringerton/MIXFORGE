@@ -37,6 +37,25 @@ function noiseInto(buf, at, sr, dur, decay, gain, rand, hp = false) {
   }
 }
 
+// classic 808-style sub kick/bass: a fast pitch drop from a punchy transient down to a long,
+// held sub fundamental, with a touch of tanh saturation for the "808" warmth.
+function eight0eightInto(buf, at, sr, gain = 1) {
+  const dur = 1.5;
+  const len = Math.floor(dur * sr);
+  const f0 = 220; // starting pitch of the drop
+  const f1 = 52;  // settles near G#1/A1, classic 808 fundamental
+  const pitchDecay = 55; // how fast the pitch drop happens
+  let ph = 0;
+  for (let k = 0; k < len && at + k < buf.length; k++) {
+    const t = k / sr;
+    const f = f1 + (f0 - f1) * Math.exp(-t * pitchDecay);
+    ph += (2 * Math.PI * f) / sr;
+    const env = Math.exp(-t * 3.2);
+    const dry = Math.sin(ph) * env;
+    buf[at + k] += Math.tanh(dry * 1.6) * gain;
+  }
+}
+
 function toneInto(buf, at, sr, hz, dur, gain, shape = "saw") {
   const len = Math.floor(dur * sr);
   for (let k = 0; k < len && at + k < buf.length; k++) {
@@ -86,8 +105,8 @@ export function makeLoop(kind, bpm, sr, bars = 4) {
   return { L, R: L, sr, bpm, name: `demo ${kind} ${bpm}` };
 }
 
-// makeKit -- one-shots for pads 0..4 (+ a pluck meant for chromatic play). Pads 5..15 start empty:
-// they are for beat-synced captures off the decks.
+// makeKit -- one-shots for pads 0..5 (kick, snare, hat, clap, pluck, 808) + a pluck meant for
+// chromatic play. Pads 6..15 start empty: they are for beat-synced captures off the decks.
 export function makeKit(sr) {
   const rand = rng(1234);
   const mk = (dur) => new Float32Array(Math.floor(dur * sr));
@@ -101,11 +120,13 @@ export function makeKit(sr) {
     const t = k / sr;
     pluck[k] = (Math.sin(2 * Math.PI * 261.6256 * t) + 0.3 * Math.sin(2 * Math.PI * 523.2511 * t)) * Math.exp(-t * 5) * 0.5;
   }
+  const eight0eight = mk(1.5); eight0eightInto(eight0eight, 0, sr, 0.95);
   return [
     { L: kick, name: "kick", oneShot: true },
     { L: snare, name: "snare", oneShot: true },
     { L: hat, name: "hat", oneShot: true },
     { L: clap, name: "clap", oneShot: true },
     { L: pluck, name: "pluck C4", oneShot: false, root: 60, attack: 0.003, decay: 0.3, sustain: 0.6, release: 0.25 },
+    { L: eight0eight, name: "808", oneShot: true },
   ];
 }

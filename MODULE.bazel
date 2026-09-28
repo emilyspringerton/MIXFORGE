@@ -1,0 +1,25 @@
+"""MIXFORGE — real Bazel build entry point.
+
+Founder real-time: "ensure we have BAZEL for mixforge." Same real, pragmatic "no external
+bazel_dep until something real needs one" precedent PARENA's own MODULE.bazel and MISHRI's own
+MODULE.bazel already established -- this repo's own real, hermetic-and-sandboxable piece
+(web/dsp_test.mjs, the DSP kernel + rendered-audio test suite) imports nothing beyond Node.js
+built-ins plus its own sibling web/engine.mjs and the checked-in web/dsp.wasm, so no
+rules_nodejs/aspect_rules_js toolchain is pulled in for it.
+
+Everything else real in this repo -- compiling dsp.wasm itself (needs a sibling ../PARENA build
+plus the LLVM/wasm-ld toolchain), the room server (needs `npm install`'s real network access for
+the `ws` dependency), and serving web/ for manual browser testing -- is deliberately NOT wrapped
+as a hermetic Bazel build/test action. See BUILD.bazel's own doc comments for why each of those
+is a `bazel run` convenience wrapper instead.
+"""
+
+module(
+    name = "mixforge",
+    version = "0.1.0",
+)
+
+# rules_shell -- Bazel 8+'s own real split: sh_binary/sh_test/sh_library are no longer Starlark
+# globals, a real BCR dependency now (same real gotcha MISHRI's own MODULE.bazel already found
+# live: "bazel build failed with 'name sh_test is not defined' until this was added").
+bazel_dep(name = "rules_shell", version = "0.6.1")

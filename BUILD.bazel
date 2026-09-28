@@ -1,0 +1,49 @@
+load("@rules_shell//shell:sh_binary.bzl", "sh_binary")
+load("@rules_shell//shell:sh_test.bzl", "sh_test")
+
+# Real Bazel entry point for MIXFORGE (founder real-time: "ensure we have BAZEL for mixforge").
+# See MODULE.bazel's own doc comment for why this repo deliberately does NOT pull in a hermetic
+# rules_nodejs/aspect_rules_js toolchain, or try to make the PARENA/LLVM wasm-build toolchain
+# itself a hermetic Bazel action.
+
+# :dsp_test -- a real, sandboxed `bazel test` action against the checked-in web/dsp.wasm (built
+# from PARENA/stdlib/mixforge/{mixer,sampler}.prn -- see scripts/build_dsp_wasm.sh). dsp_test.mjs
+# and engine.mjs import nothing beyond Node.js built-ins (node:fs/url/path) plus each other, so
+# this is genuinely hermetic modulo depending on a system `node` binary on PATH -- the same real,
+# honest trade-off MISHRI's own BUILD.bazel already accepts for its own plain-Node.js test.
+sh_test(
+    name = "dsp_test",
+    srcs = ["scripts/bazel_dsp_test.sh"],
+    data = [
+        "web/dsp.wasm",
+        "web/dsp_test.mjs",
+        "web/engine.mjs",
+    ],
+)
+
+# :build-wasm / :room-install / :room-server / :serve-web -- real, deliberately NON-hermetic
+# `bazel run` convenience wrappers, same real BUILD_WORKSPACE_DIRECTORY escape hatch MISHRI's own
+# :install/:build/:mishri targets already use. Real recommended local flow:
+#   bazel run //:build-wasm   # needs a sibling ../PARENA build + llc/wasm-ld on PATH
+#   bazel test //:dsp_test
+#   bazel run //:room-install && bazel run //:room-server   # the DJ-room WebSocket server
+#   bazel run //:serve-web                                  # python3 -m http.server for dj.html
+sh_binary(
+    name = "build-wasm",
+    srcs = ["scripts/bazel_build_wasm.sh"],
+)
+
+sh_binary(
+    name = "room-install",
+    srcs = ["scripts/bazel_room_install.sh"],
+)
+
+sh_binary(
+    name = "room-server",
+    srcs = ["scripts/bazel_room_server.sh"],
+)
+
+sh_binary(
+    name = "serve-web",
+    srcs = ["scripts/bazel_serve_web.sh"],
+)

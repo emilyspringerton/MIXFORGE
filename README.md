@@ -76,6 +76,14 @@ node web/render_demo.mjs out.wav   # offline: renders a scripted 47s set through
 npm install && npm start`, then open `web/multiplayer.html` in a few tabs. Real downloads need
 `yt-dlp` on `PATH` (or `MIXFORGE_YTDLP_BIN`) — no ffmpeg required for the room's own download path.
 
+**Bazel**: `bazel test //:dsp_test` runs the real DSP kernel + rendered-audio suite hermetically
+against the checked-in `web/dsp.wasm` (zero npm deps — `dsp_test.mjs`/`engine.mjs` import nothing
+beyond Node built-ins, same real trade-off MISHRI's own Bazel setup already accepts: hermetic
+modulo a system `node` on PATH). `bazel run //:build-wasm` / `//:room-install` / `//:room-server`
+/ `//:serve-web` are deliberately non-hermetic `bazel run` convenience wrappers around the real
+PARENA+LLVM wasm build, `npm install`, `npm start`, and `python3 -m http.server` respectively —
+each needs real network/toolchain/port access a sandboxed Bazel action doesn't get.
+
 ## Live
 
 `mixforge.okemily.com` — real, deployed: `web/multiplayer.html` (the real, unified room — see

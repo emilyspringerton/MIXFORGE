@@ -3,3 +3,4 @@ web/room.o
 server/node_modules
 web/room-cache/
 var/
+bazel-*

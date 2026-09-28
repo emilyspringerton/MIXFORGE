@@ -1,0 +1,71 @@
+name: cookie-exporter-ci
+
+# The cookie exporter (tools/cookie-exporter) is a plain, dependency-free Manifest V3 Chrome
+# extension -- no bundler, no package.json, loaded unpacked. "Builds" here means: the manifest is
+# well-formed and points at real files, every JS file parses, the pure cookies.js logic still
+# passes its real tests, and the whole thing packages cleanly into a distributable zip. No
+# `npm install` anywhere -- hermetic, plain `node` + the runner's stock `zip`.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "tools/cookie-exporter/**"
+      - ".github/workflows/cookie-exporter-ci.yml"
+  pull_request:
+    paths:
+      - "tools/cookie-exporter/**"
+      - ".github/workflows/cookie-exporter-ci.yml"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Validate manifest.json (Manifest V3, referenced files exist)
+        run: |
+          node -e '
+            const fs = require("fs");
+            const path = require("path");
+            const dir = "tools/cookie-exporter";
+            const m = JSON.parse(fs.readFileSync(path.join(dir, "manifest.json"), "utf8"));
+            if (m.manifest_version !== 3) throw new Error("expected manifest_version 3, got " + m.manifest_version);
+            if (!m.name || !m.version) throw new Error("manifest missing name/version");
+            const referenced = [m.options_page, m.action && m.action.default_popup].filter(Boolean);
+            for (const f of referenced) {
+              if (!fs.existsSync(path.join(dir, f))) throw new Error("manifest references missing file: " + f);
+            }
+            console.log("manifest.json OK:", m.name, m.version);
+          '
+
+      - name: Syntax-check every JS/MJS file
+        run: |
+          set -euo pipefail
+          for f in tools/cookie-exporter/*.js tools/cookie-exporter/*.mjs; do
+            node --check "$f"
+            echo "OK: $f"
+          done
+
+      - name: Run cookies.js unit tests (pure logic, stubbed chrome.cookies, no browser needed)
+        run: node tools/cookie-exporter/cookies_test.mjs
+
+      - name: Package the unpacked extension into a distributable zip
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          cd tools/cookie-exporter
+          zip -r ../../dist/mixforge-cookie-exporter.zip . -x "*_test.mjs" -x "README.md"
+          cd ../..
+          echo "-- packaged contents --"
+          unzip -l dist/mixforge-cookie-exporter.zip
+
+      - name: Upload extension zip artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: mixforge-cookie-exporter
+          path: dist/mixforge-cookie-exporter.zip

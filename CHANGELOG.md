@@ -1,6 +1,7 @@
 # Changelog
 
 ## 2026-09-28
+- Fixed the real co-play bug (founder real-time: 2 tabs say connected but room music doesn't play in tab 2): a client joining mid-song only ever got inert nowPlaying text, never a real play message -- now unicast on join, with handlePlay() seeking to the correct in-progress position instead of restarting from 0. Also found and fixed live while reproducing it: dead WebSocket peers (crashed tab, dropped network) used to occupy their seat forever with no way to free it, sometimes stalling currentTurn permanently -- added a standard ws heartbeat that reaps them after ~30s. Both proven with real tests (room_server_test.mjs) and a live end-to-end simulation, restarted the production room-server systemd unit to pick up the fix and clear the stale ghost-seat state it had accumulated. (sess-20260923-1030-4a526255)
 - Added an 808 sub bass/kick to the MPC sampler, pad slot 6 (dj.html) -- synthesized (pitch-drop + tanh saturation), live-verified (sess-20260923-1030-4a526255)
 - Added a real Bazel build (bazel test //:dsp_test hermetic DSP suite; bazel run //:build-wasm/:room-install/:room-server/:serve-web non-hermetic wrappers), matching the MISHRI Bazel precedent. (sess-20260923-1030-4a526255)
 - Added CI for the cookie-exporter Chrome extension (.github/workflows/cookie-exporter-ci.yml): manifest validation, JS syntax check, cookies_test.mjs, and zip packaging -- verified green on a real GitHub Actions run (sess-20260923-1030-4a526255)

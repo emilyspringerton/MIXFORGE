@@ -278,6 +278,16 @@ $("#queue").addEventListener("click", () => {
 // equivalent of the server's own broadcast timestamp. Deck playback is a custom per-sample
 // AudioWorklet loop, not a stock AudioBufferSourceNode, so this is not (and doesn't need to be)
 // a sample-accurate Web-Audio start(when) -- see NORTHSTAR.md's own "Phase 5 scoping" section.
+//
+// Real, found-live fix (2026-09-28, the actual "2 tabs say connected but tab 2 doesn't play"
+// bug): this function used to always seek(0) before playing, which was fine for the normal case
+// (every seated client gets the SAME broadcast at the SAME near-future startAtServerTimeMs, so
+// `delay` is always > 0 and elapsedSec below is always ~0) but wrong for a client that JOINS
+// mid-song -- room_server.mjs now unicasts this same play message to a joining client when
+// room.nowPlaying is set, and for that client localTarget is already in the PAST. Compute how far
+// into the track "now" actually is and seek there instead of restarting from 0 -- the "audibly
+// wrong to replay from 0" case the server's own Room class header comment already named as the
+// real reason a late joiner previously got nothing at all.
 async function handlePlay(msg) {
   if (!ctx) { pendingPlay = msg; log("(audio not started yet -- will play as soon as you click Start audio)"); return; }
   try {
@@ -287,8 +297,16 @@ async function handlePlay(msg) {
     decks[0].setDeckAudio(L, R, buf.sampleRate, msg.url.split("/").pop(), 0);
     const localTarget = msg.startAtServerTimeMs - clockOffsetMs;
     const delay = Math.max(0, localTarget - Date.now());
-    if (delay === 0) log("room track decoded later than its scheduled start -- playing immediately, slightly behind the room");
-    setTimeout(() => { send({ type: "seek", i: 0, pos: 0 }); decks[0].setPlaying(true); }, delay);
+    const elapsedSec = Math.max(0, (Date.now() - localTarget) / 1000);
+    const trackDurSec = L.length / buf.sampleRate;
+    if (elapsedSec >= trackDurSec) {
+      log("joined the room, but the currently-playing track already finished -- waiting for the next one");
+      return;
+    }
+    const startPos = Math.min(L.length - 1, Math.floor(elapsedSec * buf.sampleRate));
+    if (delay === 0 && elapsedSec > 0.25) log(`joining room track already in progress -- starting ~${elapsedSec.toFixed(1)}s in`);
+    else if (delay === 0) log("room track decoded later than its scheduled start -- playing immediately, slightly behind the room");
+    setTimeout(() => { send({ type: "seek", i: 0, pos: startPos }); decks[0].setPlaying(true); }, delay);
   } catch (err) {
     log(`could not play the room track: ${err.message}`);
   }

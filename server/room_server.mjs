@@ -147,10 +147,11 @@ export class Room {
     this.seats = new Array(MAX_SEATS).fill(null); // null or { id, ws }
     this.currentTurn = 0;
     // nowPlaying -- real, minimal room-wide playback state: the last track a `play` message was
-    // broadcast for. Sent to a newly-joined client so its UI can show what's playing, but NOT
-    // auto-scheduled for them (a real, named, deferred limitation -- see NORTHSTAR.md's own
-    // "no mid-song late join" note; playing it from position 0 for a late joiner would be
-    // audibly wrong, not actually synchronized).
+    // broadcast for. Sent to a newly-joined client both as room_state's text-only display field
+    // AND (2026-09-28 fix, see startServer's own connection handler) as a real, unicast `play`
+    // message so the joining client's existing handlePlay() actually loads and schedules it,
+    // seeking to the correct mid-song position instead of restarting from 0 -- the "no mid-song
+    // late join" gap this comment used to name is fixed, not just documented, as of this commit.
     this.nowPlaying = null;
   }
 
@@ -226,7 +227,17 @@ export function broadcast(room, msg) {
   }
 }
 
-export function startServer(port, host = "127.0.0.1", download = realDownload) {
+// HEARTBEAT_MS -- real, found-live necessity, not speculative: a browser tab that crashes, loses
+// network, or sleeps (laptop lid close) never sends a clean WebSocket close frame, so without this
+// `ws.on("close")` (the only thing that frees a seat / hands off a stuck turn) may never fire --
+// confirmed live this session by literally reproducing it (a crashed test client left two ghost
+// seats occupying the real production room, one of them holding `currentTurn` forever). Standard
+// `ws` library dead-peer pattern: ping everyone every HEARTBEAT_MS, terminate() anyone who didn't
+// pong since the last ping -- terminate() fires the same real "close" handler already wired to
+// room.leave()/advanceTurn(), no separate cleanup path to keep in sync.
+const HEARTBEAT_MS = 30000;
+
+export function startServer(port, host = "127.0.0.1", download = realDownload, heartbeatMs = HEARTBEAT_MS) {
   const room = new Room();
   const wss = new WebSocketServer({ port, host });
 
@@ -238,7 +249,18 @@ export function startServer(port, host = "127.0.0.1", download = realDownload) {
       ws.close();
       return;
     }
+    ws.isAlive = true;
+    ws.on("pong", () => { ws.isAlive = true; });
     ws.send(JSON.stringify({ type: "joined", seat }));
+    // Real fix for the actual reported bug ("2 tabs say connected but room music doesn't play in
+    // tab 2"): a client that joins mid-song only ever saw room.nowPlaying as inert text in
+    // room_state (see the Room class's own header comment on this field) -- it never got a real
+    // `play` message, so handlePlay() on the client side never ran and no audio was ever
+        // scheduled. Unicast the same play info a live client would have gotten, using the same
+    // shape (`{seat, url, startAtServerTimeMs}`) `broadcast(room, {type:"play",...})` already
+    // uses below -- the client's existing handlePlay() now computes how far into the track "now"
+    // actually is (see multiplayer.html) instead of always restarting from position 0.
+    if (room.nowPlaying) ws.send(JSON.stringify({ type: "play", ...room.nowPlaying }));
     broadcast(room, room.state());
 
     ws.on("message", (raw) => {
@@ -299,6 +321,15 @@ export function startServer(port, host = "127.0.0.1", download = realDownload) {
       broadcast(room, room.state());
     });
   });
+
+  const heartbeat = setInterval(() => {
+    for (const ws of wss.clients) {
+      if (ws.isAlive === false) { ws.terminate(); continue; } // real dead peer -> fires "close" above
+      ws.isAlive = false;
+      ws.ping();
+    }
+  }, heartbeatMs);
+  wss.on("close", () => clearInterval(heartbeat));
 
   return { wss, room, maxSeats: MAX_SEATS };
 }

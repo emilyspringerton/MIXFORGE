@@ -2,7 +2,7 @@
 // port) and connects REAL `ws` clients to it, exercising join/leave/turn-advance/broadcast
 // end to end. No mocking of WebSocketServer or the wasm module.
 import { WebSocket } from "ws";
-import { startServer } from "./room_server.mjs";
+import { startServer, realDownload } from "./room_server.mjs";
 
 function assert(cond, label) {
   if (!cond) {
@@ -215,4 +215,62 @@ rmSync(testCacheDir, { recursive: true, force: true });
 rmSync(path.join(here2, "..", "web", "room-cache"), { recursive: true, force: true });
 
 console.log("room_server playback pipeline: PASS (real download->ready/play sequencing, real queue_failed on bad URL and real downloader failure, real ping/pong)");
+
+// ---- real fix: mid-song late join gets a real, unicast `play` message ------------------------
+// This is the actual reported bug ("2 tabs say connected but tab 2 doesn't play") reproduced and
+// proven fixed here: client c queues+plays a track, THEN client d joins for the first time --
+// d must get a real "play" message (not just room_state's inert nowPlaying text) carrying the
+// same track info so its own handlePlay() actually runs.
+const testCacheDir3 = path.join(here2, "..", "web", "room-cache-test3");
+rmSync(testCacheDir3, { recursive: true, force: true });
+async function stubDownload3(url, destDir) {
+  mkdirSync(destDir, { recursive: true });
+  const p = path.join(destDir, "late-join-track.webm");
+  writeFileSync(p, "not real audio, just proving the pipeline");
+  return { ok: true, path: p };
+}
+const PORT3 = 8976;
+const s3 = startServer(PORT3, "127.0.0.1", stubDownload3);
+const c = await connect(PORT3);
+await nextMessageOfType(c, "joined");
+await new Promise((r) => setTimeout(r, 30));
+c.__queue.length = 0;
+c.send(JSON.stringify({ type: "queue_song", url: "https://youtu.be/lateJoinTest0" }));
+await nextMessageOfType(c, "play"); // c's own copy of the play broadcast, not the assertion under test
+assert(s3.room.nowPlaying && s3.room.nowPlaying.url === "/room-cache/late-join-track.webm", "room.nowPlaying is set after a real queue+download");
+
+const d = await connect(PORT3);
+const joinedD = await nextMessageOfType(d, "joined");
+assert(joinedD.seat === 1, `late joiner d assigned seat 1 (got ${joinedD.seat})`);
+const playForD = await nextMessageOfType(d, "play");
+assert(playForD.url === "/room-cache/late-join-track.webm", `late joiner d received a real, unicast play message for the in-progress track (got ${JSON.stringify(playForD)})`);
+assert(typeof playForD.startAtServerTimeMs === "number", "late-join play message carries the original startAtServerTimeMs so the client can compute how far in the track already is");
+
+c.close(); d.close(); s3.wss.close();
+rmSync(path.join(here2, "..", "web", "room-cache"), { recursive: true, force: true });
+console.log("room_server late-join fix: PASS (a client joining mid-song gets a real play message, not just inert nowPlaying text)");
+
+// ---- real fix: dead-peer reaping (no more permanently-stuck ghost seats) ---------------------
+// This is the second real, found-live bug behind the same report: a client whose socket goes
+// dead without a clean close frame (a crashed tab, a dropped network) used to occupy its seat
+// forever -- if that seat happened to hold currentTurn, NO ONE could ever queue again. Uses a
+// short heartbeatMs (the 4th startServer arg, added for exactly this) so the test runs fast;
+// production uses the real 30s default. Simulates a truly dead peer by flipping isAlive to false
+// directly (a real dropped connection never responds to the next ping either) rather than faking
+// a socket-level disconnect.
+const PORT4 = 8977;
+const s4 = startServer(PORT4, "127.0.0.1", realDownload, 100);
+const e = await connect(PORT4);
+const f = await connect(PORT4);
+await nextMessageOfType(e, "joined");
+await nextMessageOfType(f, "joined");
+assert(s4.room.occupiedCount() === 2, "both real clients occupy a seat before the dead-peer test");
+const [deadClientWs] = s4.wss.clients;
+assert(deadClientWs !== undefined, "found a real server-side ws to simulate as dead");
+deadClientWs.isAlive = false; // a real dead peer would also fail to pong the NEXT ping
+await new Promise((r) => setTimeout(r, 350)); // >= 2 heartbeat intervals at 100ms each
+assert(s4.room.occupiedCount() === 1, `dead peer's seat was reaped (occupiedCount=${s4.room.occupiedCount()})`);
+
+e.close(); f.close(); s4.wss.close();
+console.log("room_server heartbeat fix: PASS (a truly dead peer's seat is reaped, freeing it and handing off currentTurn if needed)");
 process.exit(0);

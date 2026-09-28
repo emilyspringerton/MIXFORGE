@@ -339,10 +339,30 @@ Two real gaps close this, both buildable on infrastructure that already exists:
 - **A real, user-visible delay between "queued" and "playing"** — downloading via `yt-dlp` takes
   real seconds, unlike Turntable.fm's own live-relay model. The room UI needs a `downloading...`
   state; this is a real, new UX cost this architecture accepts rather than hides.
-- **No mid-song late join** — a client connecting after a track has already started plays nothing
-  until the next `play` message. Real, deferred: seeking a freshly-joined client to the current
-  position is a harder, separate problem (same "name it, don't guess a fix" discipline this doc's
-  own open questions already follow).
+- ~~**No mid-song late join**~~ — **fixed 2026-09-28** (founder real-time: "can we make the coplay
+  stuff actually function in mixforge it doesnt actually work if i open 2 tabs it says connected
+  but the room music doesnt play in tab 2" — this WAS the bug, reproduced live before fixing:
+  a fresh two-tab test against production showed the *first* tab wasn't even reliably getting
+  `currentTurn`, because of the second, related bug below). `room_server.mjs`'s connection handler
+  now unicasts a real `{type:"play",...}` to a joining client whenever `room.nowPlaying` is set
+  (previously that info only reached `room_state`'s inert text field); `multiplayer.html`'s
+  `handlePlay()` now computes how many seconds into the track "now" actually is
+  (`elapsedSec = (Date.now() - localTarget) / 1000`) and seeks there, instead of always restarting
+  from 0 — the same real math that already scheduled synchronized starts, extended to cover a
+  start that's already in the past. If the track already finished by join time, it honestly logs
+  that and waits for the next one rather than replaying stale audio. Real test:
+  `server/room_server_test.mjs`'s "late-join fix" block (a client joins after another has already
+  queued+played, asserts it gets a real `play` message with the original `startAtServerTimeMs`).
+- **Fixed alongside it, found live while reproducing the above**: dead WebSocket peers (a crashed
+  tab, a dropped network, a laptop sleep — anything that skips a clean close frame) used to occupy
+  their seat forever, since nothing but a clean `close` event ever freed one; if that seat held
+  `currentTurn`, no one could ever queue again. A real two-tab Playwright repro against the live
+  production room hit exactly this: seats were already stuck occupied from earlier testing before
+  any new tab connected. Fixed with the standard `ws` heartbeat pattern — `room_server.mjs` pings
+  every client every 30s (configurable via `startServer`'s 4th arg, used to keep
+  `room_server_test.mjs`'s "heartbeat fix" test fast) and `terminate()`s anyone who didn't pong
+  since the last ping, which fires the existing `close` handler (seat-free + turn-handoff), no
+  separate cleanup path.
 - **Each client downloads its own copy** — fine at the real 4-seat/small-room scale this repo
   targets; a true single-relay-fan-out (closer to what `media/stream.prn` was actually designed
   for) is a real, later option if room sizes ever grow, not needed for V0.

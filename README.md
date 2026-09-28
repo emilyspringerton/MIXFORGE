@@ -112,8 +112,13 @@ config, `IDUNA/ops/terraform/main.tf`'s `cloudflare_dns_record.mixforge` for DNS
 - No key detection at all, and BPM is a basic autocorrelation estimate (`web/bpm.mjs`), not the
   real, aubio-FFI-bound MIR detector NORTHSTAR's own Phase 3 still names as separate, future work.
   Pitch fader is varispeed — no keylock/time-stretch (NORTHSTAR Phase 4).
-- Room sync is real but not sample-accurate (typically low tens of ms), and has no mid-song
-  late-join seek yet — a client joining after a track started waits for the next one. YouTube's
-  own bot-detection intermittently blocks the server-side download outright; `MIXFORGE_YTDLP_COOKIES`
-  is the wired-in fix once real cookies are available.
+- Room sync is real but not sample-accurate (typically low tens of ms). **Fixed 2026-09-28**: a
+  client joining mid-song now gets a real, unicast `play` message and seeks to the correct
+  in-progress position instead of getting nothing until the next track (this was the actual
+  "2 tabs say connected but tab 2 doesn't play" bug, found and fixed the same session it was
+  reported — see `NORTHSTAR.md`'s own "Real, honest simplifications" section for the before/after
+  and the real test proving it). Also fixed alongside it: dead peers (a crashed tab, a dropped
+  network) used to occupy their seat forever with no way to free it — a `ws` heartbeat now reaps
+  them after ~30s of no pong. YouTube's own bot-detection intermittently blocks the server-side
+  download outright; `MIXFORGE_YTDLP_COOKIES` is the wired-in fix once real cookies are available.
 - Linear interpolation for resampling (audible aliasing on big pitch-downs of bright material).

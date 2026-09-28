@@ -28,9 +28,14 @@ built into `web/dsp.wasm`. `web/engine.mjs` is the host (buffers, voice slots, t
 the parts PARENA's scalar-only WASM target can't express yet) and calls into `dsp.wasm` for every
 decision. `web/dsp-worklet.js` runs it on the audio thread (AudioWorklet).
 
-**The DJ Room: `web/room.html`** (working, real synchronized playback) — the real, unified room:
-the full 4-deck mixer/sampler above, plus a live, multi-seat room (turn order from PARENA
-`web/room.wasm`, same as `multiplayer.html`). Deck 1 is the room's shared deck — whoever's turn it
+**The DJ Room: `web/multiplayer.html`** (working, real synchronized playback) — the real, unified
+room: the full 4-deck mixer/sampler above, plus a live, multi-seat room (turn order from PARENA
+`web/room.wasm`). Built from shared components (`web/deck-strip.mjs`, `web/sampler.mjs`,
+`web/midi.mjs`, `web/waveform.mjs`, `web/mixforge-engine.mjs`) rather than a fork of `dj.html`'s
+own script — `dj.html` stays exactly as it was, the standalone solo tool; the room evolved
+alongside it by importing the same building blocks and adding room-only logic (the WebSocket/turn
+state, YouTube acquisition, synchronized-playback scheduling) on top. Deck 1 is the room's shared
+deck — whoever's turn it
 is pastes a YouTube URL, `server/room_server.mjs` downloads it server-side (`yt-dlp`, no ffmpeg
 needed — best audio-only stream, no re-encode), caches it under `web/room-cache/` (served
 statically, no new nginx config), and broadcasts a near-future start time; every connected client
@@ -52,10 +57,6 @@ this server's IP outright (`Sign in to confirm you're not a bot`) — confirmed 
 real cookies are available. Failures surface as a real, honest `queue_failed` message in the room
 UI, not a silent hang.
 
-**Multiplayer DJ room (original, narrower proof): `server/room_server.mjs` + `web/multiplayer.html`**
-(working, no audio) — the earlier turn-order-only room proof, kept as-is; superseded by
-`room.html` above for actual use.
-
 **Track import CLI: `src/main.c`** (working) — `mixforge import <youtube-url> [instrumental-url]`
 downloads via `yt-dlp` into `tracks/main/`, `tracks/instrumental/`, appends to `tracks/library.ndjson`.
 Separate code path from the room's own download (this one re-encodes to mp3 via `-x`, needs
@@ -72,14 +73,14 @@ node web/render_demo.mjs out.wav   # offline: renders a scripted 47s set through
 ```
 
 `web/dsp.wasm` is checked in, so the page runs without rebuilding. Room server: `cd server &&
-npm install && npm start`, then open `web/room.html` in a few tabs (or `web/multiplayer.html` for
-the older, audio-less proof). Real downloads need `yt-dlp` on `PATH` (or `MIXFORGE_YTDLP_BIN`) —
-no ffmpeg required for the room's own download path.
+npm install && npm start`, then open `web/multiplayer.html` in a few tabs. Real downloads need
+`yt-dlp` on `PATH` (or `MIXFORGE_YTDLP_BIN`) — no ffmpeg required for the room's own download path.
 
 ## Live
 
-`mixforge.okemily.com` — real, deployed: `web/room.html` (the real, unified room — see above),
-`web/dj.html`, and `web/multiplayer.html` all served straight from this repo checkout, `/ws`
+`mixforge.okemily.com` — real, deployed: `web/multiplayer.html` (the real, unified room — see
+above, and the domain's front door via `index.html`'s redirect) and `web/dj.html` (the standalone
+solo tool) served straight from this repo checkout, `/ws`
 proxied to the real, running `server/room_server.mjs` (loopback-only; nginx is the real gate, same
 split `jewel-jupyter.service` uses elsewhere in this monorepo). See
 `ops/nginx/mixforge-okemily.conf` + `ops/systemd/mixforge-room-server.service` for the exact
@@ -96,7 +97,7 @@ config, `IDUNA/ops/terraform/main.tf`'s `cloudflare_dns_record.mixforge` for DNS
   injectable-stub download (no network calls in CI), covering the full download→play sequencing,
   URL validation, honest failure handling, ping/pong clock sync, and a real, found-live fix (a
   disconnecting current-turn seat now auto-advances the turn instead of stalling the room forever).
-  `room.html` itself was driven headlessly in Chromium end to end against the live server: two
+  `multiplayer.html` itself was driven headlessly in Chromium end to end against the live server: two
   real tabs join as two real seats, one queues a real YouTube URL, the server downloads real audio,
   both tabs' clocks sync, and the room deck actually plays it (confirmed via a non-zero meter, not
   just message-passing). **Not yet tried with a physical MIDI controller.**

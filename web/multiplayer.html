@@ -2,89 +2,334 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>MIXFORGE — DJ Room (live, multiplayer)</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MIXFORGE — DJ Room</title>
 <style>
-  body { background: #0b0b12; color: #e8e8f0; font-family: system-ui, sans-serif; padding: 2rem; }
-  h1 { color: #ff5fa2; }
-  .room { display: flex; gap: 1rem; margin-top: 2rem; }
-  .seat { border: 2px solid #333; border-radius: 8px; padding: 1rem; width: 9rem; text-align: center; }
-  .seat.turn { border-color: #ff5fa2; box-shadow: 0 0 12px #ff5fa2; }
-  .seat.me { border-color: #4ade80; }
-  .seat.empty { opacity: 0.35; }
-  input, button { margin-top: 1.5rem; padding: 0.6rem 1rem; font-size: 1rem; }
-  #log { margin-top: 1.5rem; color: #9ad; font-family: monospace; white-space: pre-wrap; }
+  :root { --bg:#0b0b12; --panel:#151522; --line:#2a2a3d; --fg:#e8e8f0; --dim:#8a8aa0; --hot:#ff5fa2; --cool:#5fd3ff; --ok:#7dff9a; --bad:#ff6f6f; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--fg); font:14px/1.35 system-ui, sans-serif; }
+  header { display:flex; align-items:center; gap:1rem; padding:.8rem 1rem; border-bottom:1px solid var(--line); flex-wrap:wrap; }
+  header h1 { margin:0; font-size:1.2rem; color:var(--hot); letter-spacing:.08em; }
+  header .note { color:var(--dim); font-size:.8rem; }
+  button, select, input[type=number], input[type=text] { background:#20203a; color:var(--fg); border:1px solid var(--line); border-radius:6px; padding:.3rem .55rem; font:inherit; }
+  button:hover:not(:disabled) { border-color:var(--cool); }
+  button:disabled { opacity:.4; cursor:not-allowed; }
+  button.on { background:var(--hot); color:#000; border-color:var(--hot); }
+  button.big { padding:.5rem 1rem; font-weight:600; }
+  main { padding:1rem; display:grid; gap:1rem; grid-template-columns: repeat(4, minmax(170px,1fr)) minmax(190px, 1.1fr); }
+  @media (max-width: 1100px) { main { grid-template-columns: repeat(2, 1fr); } }
+  @media (max-width: 560px) { main { grid-template-columns: 1fr; } }
+  .strip, .center { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:.7rem; display:flex; flex-direction:column; gap:.45rem; }
+  .strip.room { border-color: var(--hot); }
+  .strip h2 { margin:0; font-size:1rem; display:flex; justify-content:space-between; align-items:center; gap:.4rem; }
+  .strip h2 small { color:var(--dim); font-weight:400; font-size:.75rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:9rem; }
+  .badge { font-size:.62rem; background:var(--hot); color:#000; border-radius:4px; padding:0 .3rem; font-weight:700; letter-spacing:.03em; }
+  label { display:flex; align-items:center; gap:.4rem; font-size:.78rem; color:var(--dim); }
+  label span { width:3.2rem; }
+  label output { width:2.8rem; text-align:right; color:var(--fg); font-variant-numeric: tabular-nums; }
+  input[type=range] { flex:1; accent-color:var(--hot); min-width:0; }
+  .row { display:flex; gap:.35rem; flex-wrap:wrap; align-items:center; }
+  .waveWrap { position:relative; height:40px; border-radius:4px; overflow:hidden; background:#0f0f1a; cursor:pointer; }
+  .waveWrap canvas { position:absolute; inset:0; width:100%; height:100%; display:block; }
+  .meter { height:8px; background:#222236; border-radius:4px; overflow:hidden; }
+  .meter > div { height:100%; width:0; background:linear-gradient(90deg, var(--ok) 70%, #ffd35f 85%, #ff4f4f); }
+  .fader input { accent-color:var(--cool); }
+  .center h2 { margin:0; font-size:1rem; }
+  section.sampler { grid-column: 1 / -1; background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:.8rem; display:grid; gap:1rem; grid-template-columns: minmax(260px, 420px) 1fr; }
+  @media (max-width: 760px) { section.sampler { grid-template-columns: 1fr; } }
+  .pads { display:grid; grid-template-columns: repeat(4, 1fr); gap:.45rem; }
+  .pad { aspect-ratio: 1.25; border-radius:8px; border:1px solid var(--line); background:#1d1d33; color:var(--fg); display:flex; flex-direction:column; justify-content:space-between; align-items:flex-start; padding:.35rem .45rem; user-select:none; cursor:pointer; font-size:.72rem; }
+  .pad b { font-size:.85rem; }
+  .pad.loaded { background:#262649; }
+  .pad.hit { background:var(--hot); color:#000; }
+  .pad.chrom { outline:2px solid var(--cool); }
+  .pad kbd { color:var(--dim); font-size:.68rem; }
+  .log { font:12px ui-monospace, monospace; color:var(--dim); height:7.5rem; overflow:auto; background:#0f0f1a; border-radius:6px; padding:.4rem; white-space:pre; }
+  .hint { color:var(--dim); font-size:.78rem; margin:0; }
+  #overlay { position:fixed; inset:0; background:rgba(5,5,10,.9); display:flex; align-items:center; justify-content:center; flex-direction:column; gap:1rem; text-align:center; padding:1rem; z-index:10; }
+
+  section.room { margin:1rem; background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:.8rem; display:flex; flex-direction:column; gap:.6rem; }
+  .seats { display:flex; gap:.6rem; flex-wrap:wrap; }
+  .seat { border:2px solid var(--line); border-radius:8px; padding:.5rem .8rem; min-width:6rem; text-align:center; font-size:.8rem; }
+  .seat.turn { border-color:var(--hot); box-shadow:0 0 10px rgba(255,95,162,.5); }
+  .seat.me { border-color:var(--ok); }
+  .seat.empty { opacity:.35; }
+  #wsStatus.ok { color:var(--ok); }
+  #wsStatus.bad { color:var(--bad); }
+  #nowPlaying { font-size:.85rem; color:var(--cool); }
 </style>
 </head>
 <body>
-<h1>MIXFORGE DJ Room — live server</h1>
-<p>Open this page in several tabs to see real, separate seats join the same room. Connects back to
-this same host's <code>/ws</code> path (nginx proxies it to the real
-<code>server/room_server.mjs</code> process on <code>127.0.0.1:8973</code> -- see
-<code>ops/nginx/mixforge-okemily.conf</code>). Turn-order and seat validity are computed by the
-real, same <code>room.wasm</code> the server itself calls &mdash; this page never reimplements
-that logic.</p>
-
-<div class="room" id="room"></div>
-<div>
-  <input id="url" type="text" placeholder="https://youtu.be/..." size="40">
-  <button id="queue">Queue song (only works on your turn)</button>
+<div id="overlay">
+  <h1 style="color:var(--hot);margin:0">MIXFORGE</h1>
+  <p class="hint" style="max-width:34rem">One room, up to 4 DJ seats. Deck 1 is the room's shared
+    deck -- whoever's turn it is queues a YouTube URL, everyone in the room hears the same
+    download play back together. Decks 2-4 are yours alone: load a demo loop, a local file, or
+    practice and sample. Everything <a href="dj.html" style="color:var(--cool)">dj.html</a> does --
+    full 4-deck mix, waveforms, 16-pad MIDI sampler -- works here too. Browsers need a click before
+    they will play sound.</p>
+  <button class="big" id="start">Start audio</button>
 </div>
-<div id="log"></div>
+
+<header>
+  <h1>MIXFORGE</h1>
+  <button id="playAll">Play all 4</button>
+  <label style="color:var(--fg)">MIDI in <select id="midiIn"><option value="">(none)</option></select></label>
+  <span class="note" id="midiStatus"></span>
+  <span class="note" id="dspStatus"></span>
+</header>
+
+<section class="room">
+  <div class="row" style="justify-content:space-between">
+    <b>DJ Room</b>
+    <span class="note" id="wsStatus">connecting…</span>
+  </div>
+  <div class="seats" id="seats"></div>
+  <div class="row">
+    <input id="url" type="text" placeholder="https://youtu.be/… or https://www.youtube.com/watch?v=…" size="42">
+    <button id="queue" disabled>Queue to room</button>
+    <span class="note" id="turnNote"></span>
+  </div>
+  <div class="note" id="nowPlaying"></div>
+</section>
+
+<main id="main"></main>
+
+<section class="sampler">
+  <div>
+    <div class="pads" id="pads"></div>
+  </div>
+  <div style="display:flex;flex-direction:column;gap:.6rem">
+    <h2 style="margin:0;font-size:1rem">MIDI sampler</h2>
+    <p class="hint">Pads answer MIDI notes 36–51 (C2–D#3, any channel) — or the keys <kbd>1234 QWER ASDF ZXCV</kbd>.
+      Sample off <em>any</em> deck, including deck 1 (the room's currently-playing track) or a
+      local file loaded into any deck. Notes outside the pad bank play the <em>chromatic pad</em>
+      (outlined) pitched in exact 12-TET from its root; the pitch wheel bends it ±2 semitones.
+      CC on MIDI channels 1–4 drive decks 1–4: CC7 fader, CC10 pan, CC74 filter, CC1 pitch, CC2 trim, CC8 crossfader.</p>
+    <div class="row">
+      <b style="font-size:.85rem">Sample</b>
+      <select id="capBeats"><option value="0.25">¼ beat</option><option value="0.5">½ beat</option><option value="1" selected>1 beat</option><option value="2">2 beats</option><option value="4">1 bar</option><option value="8">2 bars</option></select>
+      <span class="hint">from</span>
+      <select id="capDeck"></select>
+      <span class="hint">into pad</span>
+      <select id="capPad"></select>
+      <button id="capGo">Sample now</button>
+    </div>
+    <div class="row">
+      <span class="hint">Chromatic pad</span>
+      <select id="chromPad"></select>
+      <label><span>Sampler</span><input type="range" id="samplerGain" min="0" max="1.5" step="0.01" value="0.9"><output>0.90</output></label>
+    </div>
+    <div class="log" id="log"></div>
+  </div>
+</section>
 
 <script type="module">
-  const log = (line) => {
-    const el = document.getElementById("log");
-    el.textContent += line + "\n";
-  };
+import { DECKS, PADS } from "./engine.mjs";
+import { bootEngine } from "./mixforge-engine.mjs";
+import { createDeckStrip } from "./deck-strip.mjs";
+import { createSampler, noteName } from "./sampler.mjs";
+import { createMidiHandler } from "./midi.mjs";
+import { makeKit } from "./demo_content.mjs";
 
-  // Relative to whatever host actually served this page (127.0.0.1:8973 in local dev via nginx,
-  // wss://mixforge.okemily.com/ws in production) -- a hardcoded ws://127.0.0.1:8973 only ever
-  // worked when the browser and the server were the same machine, which stopped being true the
-  // moment this page is served from a real domain.
-  const wsProto = location.protocol === "https:" ? "wss:" : "ws:";
-  const ws = new WebSocket(`${wsProto}//${location.host}/ws`);
-  let mySeat = -1;
-  let lastState = null;
+const $ = (s, el = document) => el.querySelector(s);
+const logEl = $("#log");
+function log(line) {
+  logEl.textContent = (line + "\n" + logEl.textContent).slice(0, 4000);
+}
 
-  ws.onopen = () => log("connected");
-  ws.onclose = () => log("disconnected");
+let ctx = null, dsp = null, send = () => {};
+const deckState = Array.from({ length: DECKS }, () => ({ bpm: 0, range: 0.08, playing: false, len: 0, rate: 48000 }));
+const DEMO = ["drums", "bass", "chords", "arp"];
+const ASSIGN_DEFAULT = [0, 2, 1, 1]; // deck 1 -> A, deck 2 -> B, 3/4 thru
 
-  ws.onmessage = (ev) => {
-    const msg = JSON.parse(ev.data);
-    if (msg.type === "joined") {
-      mySeat = msg.seat;
-      log(`you are seat ${mySeat}`);
-    } else if (msg.type === "room_full") {
-      log("room is full -- try closing another tab");
-    } else if (msg.type === "track_queued") {
-      log(`seat ${msg.seat} queued: ${msg.url}`);
-    } else if (msg.type === "room_state") {
-      lastState = msg;
-      render();
+// ---- deck strips + sampler (shared components) -----------------------------------------------
+const main = $("#main");
+const decks = [];
+for (let i = 0; i < DECKS; i++) {
+  decks.push(createDeckStrip(i, {
+    container: main, send: (m, t) => send(m, t), log,
+    getCtx: () => ctx, getDsp: () => dsp,
+    deckState, demoList: DEMO, assignDefault: ASSIGN_DEFAULT[i],
+    roomBadge: i === 0,
+  }));
+}
+
+const center = document.createElement("div");
+center.className = "center";
+function slider(label, key, min, max, step, value, fmt = (v) => (+v).toFixed(2)) {
+  return `<label><span>${label}</span><input type="range" data-key="${key}" min="${min}" max="${max}" step="${step}" value="${value}"><output>${fmt(value)}</output></label>`;
+}
+center.innerHTML = `
+  <h2>Master</h2>
+  ${slider("X-fade", "crossfader", 0, 1, 0.005, 0.5)}
+  ${slider("Master", "master", 0, 1.5, 0.01, 0.8)}
+  <div class="meter" id="mL"><div></div></div>
+  <div class="meter" id="mR"><div></div></div>
+  <p class="hint">Crossfader is equal-power; decks set to <em>Thru</em> ignore it. The sampler bus always rides Thru. The bus is soft-clipped, so four hot decks saturate instead of crackling.</p>
+  <p class="hint" id="voices">voices: 0</p>`;
+main.appendChild(center);
+center.querySelectorAll("input[type=range]").forEach((r) => {
+  const out = r.nextElementSibling;
+  r.addEventListener("input", () => { out.textContent = (+r.value).toFixed(2); send({ type: "global", key: r.dataset.key, value: +r.value }); });
+  r.addEventListener("dblclick", () => { r.value = r.defaultValue; r.dispatchEvent(new Event("input")); });
+});
+
+const sampler = createSampler({
+  send: (m, t) => send(m, t), log, deckState, PADS,
+  deckLabels: ["deck 1 (room)", "deck 2", "deck 3", "deck 4"],
+});
+
+const midi = createMidiHandler({
+  onMessage: (bytes) => send({ type: "midi", data: bytes }),
+  onNoteOn: (note) => sampler.flashPad(note),
+  statusEl: $("#midiStatus"), selectEl: $("#midiIn"),
+});
+
+$("#playAll").addEventListener("click", () => {
+  const anyStopped = deckState.some((d) => d.len && !d.playing);
+  for (let i = 0; i < DECKS; i++) if (deckState[i].len) { send({ type: "seek", i, pos: 0 }); decks[i].setPlaying(anyStopped); }
+});
+
+// ---- room / WebSocket --------------------------------------------------------------------------
+// Relative to whatever host actually served this page -- wss://mixforge.okemily.com/ws in
+// production, ws://127.0.0.1:8973 in local dev via nginx. See NORTHSTAR.md's own "Phase 5
+// scoping" section for the full real architecture this implements.
+const wsProto = location.protocol === "https:" ? "wss:" : "ws:";
+const ws = new WebSocket(`${wsProto}//${location.host}/ws`);
+let mySeat = -1;
+let lastRoomState = null;
+let clockOffsetMs = 0; // serverTime ~= Date.now() + clockOffsetMs
+let pendingPlay = null; // a real {url, startAtServerTimeMs} that arrived before audio started
+
+function wsSend(m) { if (ws.readyState === ws.OPEN) ws.send(JSON.stringify(m)); }
+function syncClock() { wsSend({ type: "ping", t0: Date.now() }); }
+
+ws.onopen = () => { $("#wsStatus").textContent = "connected"; $("#wsStatus").className = "ok"; syncClock(); setInterval(syncClock, 10000); };
+ws.onclose = () => { $("#wsStatus").textContent = "disconnected"; $("#wsStatus").className = "bad"; $("#queue").disabled = true; };
+
+ws.onmessage = (ev) => {
+  const msg = JSON.parse(ev.data);
+  if (msg.type === "joined") {
+    mySeat = msg.seat;
+    log(`you are seat ${mySeat + 1}`);
+  } else if (msg.type === "room_full") {
+    log("room is full (max 4 seats) -- try again once someone leaves");
+    $("#wsStatus").textContent = "room full"; $("#wsStatus").className = "bad";
+  } else if (msg.type === "room_state") {
+    lastRoomState = msg;
+    renderSeats();
+    if (msg.nowPlaying && msg.nowPlaying.url) {
+      $("#nowPlaying").textContent = `now playing (seat ${msg.nowPlaying.seat + 1}): ${msg.nowPlaying.url.split("/").pop()}`;
     }
-  };
-
-  function render() {
-    const roomEl = document.getElementById("room");
-    roomEl.innerHTML = "";
-    if (!lastState) return;
-    for (let i = 0; i < lastState.maxSeats; i++) {
-      const occ = lastState.seats[i];
-      const el = document.createElement("div");
-      el.className = "seat";
-      if (!occ) el.classList.add("empty");
-      if (i === lastState.currentTurn) el.classList.add("turn");
-      if (i === mySeat) el.classList.add("me");
-      el.textContent = occ ? `Seat ${i}${i === mySeat ? " (you)" : ""}` : `Seat ${i} (empty)`;
-      roomEl.appendChild(el);
+  } else if (msg.type === "track_queued") {
+    log(`seat ${msg.seat + 1} queued: ${msg.url}`);
+  } else if (msg.type === "downloading") {
+    log(`downloading seat ${msg.seat + 1}'s track… (real yt-dlp download, needs a moment)`);
+    $("#nowPlaying").textContent = `downloading seat ${msg.seat + 1}'s track…`;
+  } else if (msg.type === "download_retry") {
+    if (msg.retrying) {
+      log(`download attempt ${msg.attempt}/${msg.maxAttempts} failed for seat ${msg.seat + 1}'s track: ${msg.error} -- retrying in ${(msg.retryInMs / 1000).toFixed(1)}s`);
+      $("#nowPlaying").textContent = `download failed once, retrying seat ${msg.seat + 1}'s track in ${(msg.retryInMs / 1000).toFixed(1)}s…`;
+    } else {
+      log(`retry attempt ${msg.attempt}/${msg.maxAttempts} also failed for seat ${msg.seat + 1}'s track: ${msg.error}`);
     }
+  } else if (msg.type === "queue_failed") {
+    log(`queue failed: ${msg.error}`);
+    $("#nowPlaying").textContent = `queue failed: ${msg.error}`;
+  } else if (msg.type === "play") {
+    log(`seat ${msg.seat + 1}'s track is ready -- scheduling synchronized playback`);
+    handlePlay(msg);
+  } else if (msg.type === "pong") {
+    const rtt = Date.now() - msg.t0;
+    clockOffsetMs = msg.serverTime - (msg.t0 + rtt / 2);
   }
+};
 
-  document.getElementById("queue").addEventListener("click", () => {
-    const url = document.getElementById("url").value.trim();
-    if (!url) return;
-    ws.send(JSON.stringify({ type: "queue_song", url }));
+function renderSeats() {
+  const el = $("#seats");
+  el.innerHTML = "";
+  if (!lastRoomState) return;
+  for (let i = 0; i < lastRoomState.maxSeats; i++) {
+    const occ = lastRoomState.seats[i];
+    const d = document.createElement("div");
+    d.className = "seat";
+    if (!occ) d.classList.add("empty");
+    if (i === lastRoomState.currentTurn) d.classList.add("turn");
+    if (i === mySeat) d.classList.add("me");
+    d.textContent = occ ? `Seat ${i + 1}${i === mySeat ? " (you)" : ""}` : `Seat ${i + 1} (empty)`;
+    el.appendChild(d);
+  }
+  const isMyTurn = mySeat >= 0 && mySeat === lastRoomState.currentTurn;
+  $("#queue").disabled = !isMyTurn || ws.readyState !== ws.OPEN;
+  $("#turnNote").textContent = isMyTurn ? "it's your turn!" : `waiting for seat ${lastRoomState.currentTurn + 1}`;
+}
+
+$("#queue").addEventListener("click", () => {
+  const url = $("#url").value.trim();
+  if (!url) return;
+  wsSend({ type: "queue_song", url });
+  $("#url").value = "";
+});
+
+// handlePlay -- real, "roughly synchronized" (not sample-accurate) scheduled start: fetch the
+// server-cached file, decode it, load it into deck 1 (the room's shared deck, overwriting
+// whatever was there), then schedule the actual `playing=true` at the computed local-clock
+// equivalent of the server's own broadcast timestamp. Deck playback is a custom per-sample
+// AudioWorklet loop, not a stock AudioBufferSourceNode, so this is not (and doesn't need to be)
+// a sample-accurate Web-Audio start(when) -- see NORTHSTAR.md's own "Phase 5 scoping" section.
+async function handlePlay(msg) {
+  if (!ctx) { pendingPlay = msg; log("(audio not started yet -- will play as soon as you click Start audio)"); return; }
+  try {
+    const buf = await ctx.decodeAudioData(await (await fetch(msg.url)).arrayBuffer());
+    const L = new Float32Array(buf.getChannelData(0));
+    const R = new Float32Array(buf.numberOfChannels > 1 ? buf.getChannelData(1) : buf.getChannelData(0));
+    decks[0].setDeckAudio(L, R, buf.sampleRate, msg.url.split("/").pop(), 0);
+    const localTarget = msg.startAtServerTimeMs - clockOffsetMs;
+    const delay = Math.max(0, localTarget - Date.now());
+    if (delay === 0) log("room track decoded later than its scheduled start -- playing immediately, slightly behind the room");
+    setTimeout(() => { send({ type: "seek", i: 0, pos: 0 }); decks[0].setPlaying(true); }, delay);
+  } catch (err) {
+    log(`could not play the room track: ${err.message}`);
+  }
+}
+
+// ---- boot ---------------------------------------------------------------------------------------
+$("#start").addEventListener("click", async () => {
+  $("#start").disabled = true;
+  const engine = await bootEngine({
+    onState: updateUi,
+    onCaptured: (m) => log(`sampled ${m.frames} frames into pad ${m.j + 1}`),
+    onMidiEvent: (e) => {
+      if (e.kind === "note-on") log(`note-on ${noteName(e.note)} vel ${e.velocity} -> ${e.pad >= 0 ? "pad " + (e.pad + 1) : "chromatic pad " + (sampler.getChromPad() + 1)}`);
+      else if (e.kind === "cc") log(`CC${e.cc}=${e.value} deck ${e.deck + 1} -> ${["fader","pan","filter","crossfader","pitch","trim"][e.param] || "unmapped"}`);
+      else if (e.kind === "bend") log(`bend ${e.value}`);
+    },
   });
+  ctx = engine.ctx; dsp = engine.dsp; send = engine.send;
+
+  // Deck 1 stays empty until the room hands it a track; decks 2-4 get demo loops so there's
+  // always something to practice/sample with locally.
+  DEMO.slice(1).forEach((k, idx) => { const i = idx + 1; decks[i].loadDemo(k); send({ type: "deckParam", i, key: "assign", value: ASSIGN_DEFAULT[i] }); });
+  send({ type: "deckParam", i: 0, key: "assign", value: ASSIGN_DEFAULT[0] });
+  makeKit(ctx.sampleRate).forEach((p, j) => {
+    const L = new Float32Array(p.L);
+    send({ type: "pad", j, L, R: L, rate: ctx.sampleRate, opts: { name: p.name, oneShot: p.oneShot, root: p.root || 60, attack: p.attack ?? 0.002, decay: p.decay ?? 0.05, sustain: p.sustain ?? 1, release: p.release ?? 0.08 } }, [L.buffer]);
+  });
+  send({ type: "global", key: "chromaticPad", value: sampler.getChromPad() });
+  $("#dspStatus").textContent = `dsp.wasm: ${Object.keys(dsp).filter((k) => typeof dsp[k] === "function").length} PARENA exports @ ${ctx.sampleRate} Hz`;
+  $("#overlay").remove();
+  midi.init();
+  if (pendingPlay) { const p = pendingPlay; pendingPlay = null; handlePlay(p); }
+});
+
+function updateUi(s) {
+  s.decks.forEach((d, i) => decks[i].updateFromEngineState(d));
+  $("#mL > div").style.width = `${Math.min(100, s.masterPeakL * 100)}%`;
+  $("#mR > div").style.width = `${Math.min(100, s.masterPeakR * 100)}%`;
+  $("#voices").textContent = `voices: ${s.voices}/16`;
+  sampler.renderPads(s);
+}
 </script>
 </body>
 </html>

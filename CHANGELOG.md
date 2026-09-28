@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-09-28
+
+- Refactored the DJ room into shared components: extracted deck-strip.mjs/sampler.mjs/midi.mjs/waveform.mjs/mixforge-engine.mjs out of the old room.html duplication; dj.html untouched (still the standalone solo tool); multiplayer.html rebuilt on the shared components as the real unified room (4-deck mix + sampler + waveforms + BPM estimate + YouTube acquisition + local file loading on any deck); room.html retired, index.html now redirects to multiplayer.html (sess-20260923-1030-4a526255)
+
+
 ## 2026-09-27
 - Added one real, jittered retry on download failure with full log visibility in the room client. Fixed a real UX gap found live: the root domain (mixforge.okemily.com/) still served the old standalone compiler-proof page instead of the unified room -- moved that proof to wasm-proof.html and made index.html redirect straight to room.html. (sess-20260923-1030-4a526255)
 - Unified the DJ mixer and multiplayer room into one real, working page (room.html): server-side download-on-queue, clock-synced playback, real waveform display, basic BPM estimate, sampling off either a local file or the room's live track. Two real bugs found and fixed via live two-tab testing. New Chrome extension (tools/cookie-exporter) uploads real YouTube cookies to a new IDUNA endpoint to work around YouTube's own intermittent server-side bot detection. (sess-20260923-1030-4a526255)

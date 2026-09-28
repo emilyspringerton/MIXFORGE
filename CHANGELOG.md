@@ -1,6 +1,7 @@
 # Changelog
 
 ## 2026-09-28
+- Added an 808 sub bass/kick to the MPC sampler, pad slot 6 (dj.html) -- synthesized (pitch-drop + tanh saturation), live-verified (sess-20260923-1030-4a526255)
 - Added a real Bazel build (bazel test //:dsp_test hermetic DSP suite; bazel run //:build-wasm/:room-install/:room-server/:serve-web non-hermetic wrappers), matching the MISHRI Bazel precedent. (sess-20260923-1030-4a526255)
 - Added CI for the cookie-exporter Chrome extension (.github/workflows/cookie-exporter-ci.yml): manifest validation, JS syntax check, cookies_test.mjs, and zip packaging -- verified green on a real GitHub Actions run (sess-20260923-1030-4a526255)
 

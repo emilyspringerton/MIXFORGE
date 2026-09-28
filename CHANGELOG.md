@@ -2,6 +2,7 @@
 
 ## 2026-09-28
 
+- Cookie exporter -> IDUNA pipeline now actually works end to end: nothing ever provisioned MIXFORGE_COOKIE_UPLOAD_TOKEN, so IDUNA's endpoint was permanently "disabled". New scripts/gen_cookie_upload_token.sh mints it into var/mixforge-secrets.env (IDUNA companion change reads it from there per request); verified live against a real IDUNA binary with the extension's own cookies.txt output. README + extension README/options updated (session_019PK1Mu91uSfALchorLxXNY)
 - Refactored the DJ room into shared components: extracted deck-strip.mjs/sampler.mjs/midi.mjs/waveform.mjs/mixforge-engine.mjs out of the old room.html duplication; dj.html untouched (still the standalone solo tool); multiplayer.html rebuilt on the shared components as the real unified room (4-deck mix + sampler + waveforms + BPM estimate + YouTube acquisition + local file loading on any deck); room.html retired, index.html now redirects to multiplayer.html (sess-20260923-1030-4a526255)
 
 

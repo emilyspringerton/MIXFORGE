@@ -14,9 +14,10 @@
 </head>
 <body>
   <h1>MIXFORGE Cookie Exporter — settings</h1>
-  <p class="hint">The upload token comes from <code>MIXFORGE/var/mixforge-secrets.env</code> on
-    the server (<code>MIXFORGE_COOKIE_UPLOAD_TOKEN</code>) -- treat it as a real secret, whoever
-    has it can overwrite the live cookies file.</p>
+  <p class="hint">Get the upload token by running <code>MIXFORGE/scripts/gen_cookie_upload_token.sh</code>
+    on the server (it prints <code>MIXFORGE_COOKIE_UPLOAD_TOKEN</code> from
+    <code>MIXFORGE/var/mixforge-secrets.env</code>) -- treat it as a real secret, whoever has it
+    can overwrite the live cookies file.</p>
   <label>IDUNA endpoint<input id="endpoint" placeholder="https://okemily.com/api/v1/mixforge/cookies"></label>
   <label>Upload token<input id="token" type="password"></label>
   <button id="save">Save</button>

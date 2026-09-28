@@ -53,9 +53,14 @@ reason).
 
 Real, found-live, honestly named limitation: YouTube's own bot-detection intermittently blocks
 this server's IP outright (`Sign in to confirm you're not a bot`) — confirmed live, not assumed;
-`MIXFORGE_YTDLP_COOKIES` (a Netscape-format cookies.txt path) is the wired-in escape hatch once
-real cookies are available. Failures surface as a real, honest `queue_failed` message in the room
-UI, not a silent hang.
+`MIXFORGE_YTDLP_COOKIES` (a Netscape-format cookies.txt path) is the wired-in escape hatch. Real
+cookies get there via the **cookie-exporter Chrome extension** (`tools/cookie-exporter`): run
+`scripts/gen_cookie_upload_token.sh` on the server once to mint the upload token, paste it into the
+extension, click **Export & upload to IDUNA** — IDUNA (`POST /api/v1/mixforge/cookies`) writes
+`var/ytdlp-cookies.txt` and the next queued download uses it, no restart. Server half verified
+live against a real IDUNA binary (2026-09-28); the extension itself was only tested with a stubbed
+`chrome.cookies` under Node, not yet clicked in a real browser. Failures surface as a real, honest
+`queue_failed` message in the room UI, not a silent hang.
 
 **Track import CLI: `src/main.c`** (working) — `mixforge import <youtube-url> [instrumental-url]`
 downloads via `yt-dlp` into `tracks/main/`, `tracks/instrumental/`, appends to `tracks/library.ndjson`.
@@ -107,5 +112,5 @@ config, `IDUNA/ops/terraform/main.tf`'s `cloudflare_dns_record.mixforge` for DNS
 - Room sync is real but not sample-accurate (typically low tens of ms), and has no mid-song
   late-join seek yet — a client joining after a track started waits for the next one. YouTube's
   own bot-detection intermittently blocks the server-side download outright; `MIXFORGE_YTDLP_COOKIES`
-  is the wired-in fix once real cookies are available.
+  plus the cookie-exporter extension is the fix; cookies expire, so re-export when downloads fail again.
 - Linear interpolation for resampling (audible aliasing on big pitch-downs of bright material).

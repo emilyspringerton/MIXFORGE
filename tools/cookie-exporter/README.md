@@ -26,8 +26,12 @@ same-origin policy blocks a *webpage's* JS from reading another site's cookies, 
 1. `chrome://extensions` → enable **Developer mode** (top right) → **Load unpacked** → select
    this directory (`MIXFORGE/tools/cookie-exporter`).
 2. Click the extension's icon → **Configure endpoint / token**.
-3. Endpoint: `https://okemily.com/api/v1/mixforge/cookies` (pre-filled). Token: the value of
-   `MIXFORGE_COOKIE_UPLOAD_TOKEN` in `MIXFORGE/var/mixforge-secrets.env` on the server.
+3. Endpoint: `https://okemily.com/api/v1/mixforge/cookies` (pre-filled). Token: on the server, run
+   `MIXFORGE/scripts/gen_cookie_upload_token.sh` — it writes `MIXFORGE_COOKIE_UPLOAD_TOKEN` into
+   `MIXFORGE/var/mixforge-secrets.env` (0600, gitignored) and prints it. IDUNA re-reads that file
+   on every upload, so no IDUNA restart is needed (an explicit `MIXFORGE_COOKIE_UPLOAD_TOKEN` in
+   IDUNA's own environment still wins if set; `MIXFORGE_SECRETS_FILE` overrides the file path).
+   Rotate with `--rotate`.
 4. Save. Make sure you're logged into YouTube in this same browser.
 
 ## Use

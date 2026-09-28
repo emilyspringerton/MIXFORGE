@@ -1,6 +1,7 @@
 # Changelog
 
 ## 2026-09-28
+- Added a real Bazel build (bazel test //:dsp_test hermetic DSP suite; bazel run //:build-wasm/:room-install/:room-server/:serve-web non-hermetic wrappers), matching the MISHRI Bazel precedent. (sess-20260923-1030-4a526255)
 - Added CI for the cookie-exporter Chrome extension (.github/workflows/cookie-exporter-ci.yml): manifest validation, JS syntax check, cookies_test.mjs, and zip packaging -- verified green on a real GitHub Actions run (sess-20260923-1030-4a526255)
 
 - Refactored the DJ room into shared components: extracted deck-strip.mjs/sampler.mjs/midi.mjs/waveform.mjs/mixforge-engine.mjs out of the old room.html duplication; dj.html untouched (still the standalone solo tool); multiplayer.html rebuilt on the shared components as the real unified room (4-deck mix + sampler + waveforms + BPM estimate + YouTube acquisition + local file loading on any deck); room.html retired, index.html now redirects to multiplayer.html (sess-20260923-1030-4a526255)

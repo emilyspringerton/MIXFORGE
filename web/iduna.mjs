@@ -109,6 +109,12 @@ export function startSignIn() {
       if (ev.origin !== location.origin || !ev.data || ev.data.type !== "mixforge-iduna-session") return;
       window.removeEventListener("message", onMessage);
       clearInterval(poll);
+      // sessionStorage is scoped per top-level browsing context, not shared with the popup that
+      // exchanged the token -- save() there never reaches here. This save() call, in the opener's
+      // own context, is the one that actually matters (real, live-found bug: the popup flow
+      // completed and posted a session back, but apiFetch still saw "not signed in" because
+      // nothing had ever written it into *this* window's sessionStorage).
+      if (ev.data.session) save(ev.data.session);
       resolve(ev.data.session || null);
     }
     window.addEventListener("message", onMessage);

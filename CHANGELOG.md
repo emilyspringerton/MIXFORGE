@@ -1,6 +1,18 @@
 # Changelog
 
 ## 2026-09-29
+- S513: "Save to IDUNA" is now fully live end to end. Founder ran `sudo-queue/96-mixforge-api-
+  proxy-nginx.sh`, deploying the `/api/` same-origin proxy to IDUNA. Re-testing against
+  production immediately after (a real Playwright run) caught two real, live-only bugs, both
+  fixed the same session: (1) `web/iduna.mjs`'s SSO popup saved its exchanged session into the
+  *popup's own* `sessionStorage`, not the opener's (sessionStorage is scoped per top-level
+  browsing context and never shared back) -- "Save to IDUNA" registered a real account via the
+  popup but then failed "not signed in" back on the main page; fixed by saving in the opener's
+  own `onMessage` handler, the context that actually matters. (2) IDUNA's `recordingCreate`
+  rejected every real recording because a MediaRecorder's actual Content-Type
+  (`audio/webm;codecs=opus`) never exact-matched its bare-type allowlist -- fixed IDUNA-side
+  (`mime.ParseMediaType`). Full round trip now confirmed live: record -> stop -> sign in via
+  popup -> save -> appears in "my mixes" with a working download button. MIXFORGE@32943c7. (sess-20260923-1030-4a526255)
 - S513: client-side mix recorder (founder real-time: "mixforge add a record button that works on
   the client side it lets you record the mix and then you can download it or save it to your
   IDUNA sso account"). New `web/recorder.mjs`: a Record button taps a

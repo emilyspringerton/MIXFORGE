@@ -30,14 +30,13 @@ See `NORTHSTAR.md` for the full plan and history.
   a real non-empty audio Blob). **Save to IDUNA**: signs in via a popup to IDUNA's own hosted SSO
   page (`iam.okemily.com`), exchanges that identity for a MIXFORGE-scoped player token
   (`mixforge.play`), and uploads the recording to `POST /api/v1/games/mixforge/recordings` — a
-  "my saved mixes" list lets you download them back later. The IDUNA side (permission, storage,
-  the three `recordings` routes) is live and verified directly against production (`curl` round-
-  trip: save → list → byte-for-byte download all confirmed). **Not yet live end-to-end on
-  mixforge.okemily.com**: the vhost's nginx config needs one more same-origin `/api/` proxy block
-  to reach IDUNA (`ops/nginx/mixforge-okemily.conf` already has it; deploying it needs root —
-  queued as `sudo-queue/96-mixforge-api-proxy-nginx.sh`, not yet run as of this writing) — until
-  then, the sign-in popup will show a sign-in failure after registering/logging in, honestly, not
-  silently.
+  "my saved mixes" list lets you download them back later. **Fully live end-to-end**, verified
+  with a real Playwright run against production: record → stop → sign in via the popup → save →
+  the recording appears in "my mixes" with a working download button. Two real, live-only bugs
+  were found this way and fixed the same session — the SSO popup was saving its session into its
+  own `sessionStorage` instead of the opener's, and a real browser's Content-Type
+  (`audio/webm;codecs=opus`) never matched the server's bare-type allowlist — see CHANGELOG.md's
+  2026-09-29 entries for both.
 
 Where the code lives: the DSP kernels are `PARENA/stdlib/mixforge/mixer.prn` and `sampler.prn`,
 built into `web/dsp.wasm`. `web/engine.mjs` is the host (buffers, voice slots, the frame loop —

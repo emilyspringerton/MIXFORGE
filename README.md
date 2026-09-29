@@ -22,6 +22,22 @@ See `NORTHSTAR.md` for the full plan and history.
 - **MIDI control** (Web MIDI — Chrome/Edge; Firefox needs a site permission add-on): CC on MIDI
   channels 1–4 drives decks 1–4 — CC7 fader, CC10 pan, CC74 filter, CC1 pitch, CC2 trim, CC8
   crossfader.
+- **Record the mix** (`web/recorder.mjs`, both `dj.html` and `multiplayer.html`): a Record button
+  taps a `MediaStreamAudioDestinationNode` fanned out from the exact same worklet output the
+  speakers get (never a separate render, so it can't drift from what you actually heard), and
+  records it with the browser's native `MediaRecorder` (WebM/Opus, or OGG/Opus on Firefox).
+  **Download** always works — verified live in a real headless Chromium session (record → stop →
+  a real non-empty audio Blob). **Save to IDUNA**: signs in via a popup to IDUNA's own hosted SSO
+  page (`iam.okemily.com`), exchanges that identity for a MIXFORGE-scoped player token
+  (`mixforge.play`), and uploads the recording to `POST /api/v1/games/mixforge/recordings` — a
+  "my saved mixes" list lets you download them back later. The IDUNA side (permission, storage,
+  the three `recordings` routes) is live and verified directly against production (`curl` round-
+  trip: save → list → byte-for-byte download all confirmed). **Not yet live end-to-end on
+  mixforge.okemily.com**: the vhost's nginx config needs one more same-origin `/api/` proxy block
+  to reach IDUNA (`ops/nginx/mixforge-okemily.conf` already has it; deploying it needs root —
+  queued as `sudo-queue/96-mixforge-api-proxy-nginx.sh`, not yet run as of this writing) — until
+  then, the sign-in popup will show a sign-in failure after registering/logging in, honestly, not
+  silently.
 
 Where the code lives: the DSP kernels are `PARENA/stdlib/mixforge/mixer.prn` and `sampler.prn`,
 built into `web/dsp.wasm`. `web/engine.mjs` is the host (buffers, voice slots, the frame loop —

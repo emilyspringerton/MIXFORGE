@@ -44,6 +44,22 @@
   .log { font:12px ui-monospace, monospace; color:var(--dim); height:7.5rem; overflow:auto; background:#0f0f1a; border-radius:6px; padding:.4rem; white-space:pre; }
   .hint { color:var(--dim); font-size:.78rem; margin:0; }
   #overlay { position:fixed; inset:0; background:rgba(5,5,10,.9); display:flex; align-items:center; justify-content:center; flex-direction:column; gap:1rem; text-align:center; padding:1rem; }
+
+  /* Mix recorder (S513) */
+  .rf-rec { background:#3a1030; border-color:var(--hot); }
+  .rf-rec.rf-live { background:var(--hot); color:#000; animation: rf-pulse 1s infinite; }
+  @keyframes rf-pulse { 0%,100% { opacity:1 } 50% { opacity:.55 } }
+  .rf-time { font-variant-numeric: tabular-nums; color:var(--dim); min-width:2.6rem; display:inline-block; }
+  .rf-account { font-size:.78rem; color:var(--dim); }
+  .rf-account a { color:var(--cool); text-decoration:none; }
+  .rf-account a:hover { text-decoration:underline; }
+  .rf-result { display:flex; align-items:center; gap:.5rem; font-size:.8rem; background:#1d1d33; border-radius:6px; padding:.3rem .5rem; width:100%; flex-basis:100%; }
+  .rf-result a { color:var(--cool); }
+  .rf-status { color:var(--ok); }
+  .rf-mixes { width:100%; flex-basis:100%; background:#0f0f1a; border-radius:6px; padding:.4rem .6rem; font-size:.78rem; }
+  .rf-mix-row { display:flex; gap:.6rem; align-items:center; padding:.2rem 0; border-bottom:1px solid var(--line); }
+  .rf-mix-row:last-child { border-bottom:none; }
+  .rf-mix-row .rf-meta { color:var(--dim); flex:1; }
 </style>
 </head>
 <body>
@@ -61,6 +77,7 @@
   <label style="color:var(--fg)">MIDI in <select id="midiIn"><option value="">(none)</option></select></label>
   <span class="note" id="midiStatus"></span>
   <span class="note" id="dspStatus"></span>
+  <div class="row" id="recorder"></div>
 </header>
 
 <main id="main"></main>
@@ -95,6 +112,15 @@
 <script type="module">
 import { makeLoop, makeKit } from "./demo_content.mjs";
 import { instantiateDsp, DECKS, PADS } from "./engine.mjs";
+import { mountRecorder } from "./recorder.mjs";
+import { maybeHandlePopupReturn, consumeReturnFragment } from "./iduna.mjs";
+
+// If this exact page is the popup IDUNA's SSO login redirected back to (see iduna.mjs's own
+// startSignIn), finish that round trip and stop -- don't also boot the full mixer in the popup.
+if (await maybeHandlePopupReturn()) {
+  throw new Error("__mixforge_popup_return__"); // stops this module without an unhandled-looking error path
+}
+await consumeReturnFragment(); // fallback path: startSignIn's popup got blocked, this is the real window returning
 
 const $ = (s, el = document) => el.querySelector(s);
 const logEl = $("#log");
@@ -339,6 +365,11 @@ $("#start").addEventListener("click", async () => {
   await ctx.audioWorklet.addModule("dsp-worklet.js");
   node = new AudioWorkletNode(ctx, "mixforge-processor", { outputChannelCount: [2], processorOptions: { wasm } });
   node.connect(ctx.destination);
+  // Fan-out for the mix recorder (web/recorder.mjs, S513) -- tapped off the exact same worklet
+  // output the speakers get, so a recording can never drift from what the DJ actually heard.
+  const recordDest = ctx.createMediaStreamDestination();
+  node.connect(recordDest);
+  mountRecorder($("#recorder"), recordDest.stream, log);
   node.port.onmessage = (ev) => {
     const m = ev.data;
     if (m.type === "state") updateUi(m.state);

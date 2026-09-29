@@ -1,5 +1,28 @@
 # Changelog
 
+## 2026-09-29
+- S513: client-side mix recorder (founder real-time: "mixforge add a record button that works on
+  the client side it lets you record the mix and then you can download it or save it to your
+  IDUNA sso account"). New `web/recorder.mjs`: a Record button taps a
+  `MediaStreamAudioDestinationNode` fanned out from the exact worklet output that already reaches
+  the speakers (added to `mixforge-engine.mjs`'s `bootEngine` for `multiplayer.html`, and inline
+  in `dj.html`'s own `#start` handler), and records it via the browser's native `MediaRecorder`.
+  Download always works (live-verified in a real headless Chromium session: record -> stop -> a
+  real non-empty audio Blob, byte-for-byte fetchable back off its own blob: URL). New
+  `web/iduna.mjs`: "Save to IDUNA" opens IDUNA's hosted SSO login page
+  (`iam.okemily.com/api/v1/auth/sso/login`) in a popup (so an already-recorded, not-yet-saved mix
+  in page memory survives the round trip), exchanges the returned identity token for a
+  MIXFORGE-scoped player token via the new `/api/v1/games/mixforge/sso-exchange` (IDUNA `S513`),
+  and uploads via `POST .../recordings`; a "my mixes" list lists/downloads them back. Companion
+  IDUNA work (`mixforge.play` permission, `mixforge_recordings` BLOB storage, the three
+  `recordings` routes) already live and curl-verified against production. **Real, honest, not yet
+  live end-to-end**: mixforge.okemily.com's nginx vhost has no same-origin `/api/` proxy to IDUNA
+  yet (`ops/nginx/mixforge-okemily.conf` has the block, deploying it needs root --
+  `sudo-queue/96-mixforge-api-proxy-nginx.sh`) -- confirmed live via a real Playwright run against
+  production: recording works, the SSO popup registers a real account and returns correctly, but
+  the sso-exchange fetch currently 404s (nginx's own generic 404, not IDUNA's) until that one
+  proxy block is deployed. (sess-20260923-1030-4a526255)
+
 ## 2026-09-28
 - Fixed the real co-play bug (founder real-time: 2 tabs say connected but room music doesn't play in tab 2): a client joining mid-song only ever got inert nowPlaying text, never a real play message -- now unicast on join, with handlePlay() seeking to the correct in-progress position instead of restarting from 0. Also found and fixed live while reproducing it: dead WebSocket peers (crashed tab, dropped network) used to occupy their seat forever with no way to free it, sometimes stalling currentTurn permanently -- added a standard ws heartbeat that reaps them after ~30s. Both proven with real tests (room_server_test.mjs) and a live end-to-end simulation, restarted the production room-server systemd unit to pick up the fix and clear the stale ghost-seat state it had accumulated. (sess-20260923-1030-4a526255)
 - Added an 808 sub bass/kick to the MPC sampler, pad slot 6 (dj.html) -- synthesized (pitch-drop + tanh saturation), live-verified (sess-20260923-1030-4a526255)

@@ -11,6 +11,11 @@ export async function bootEngine({ onState, onCaptured, onMidiEvent }) {
   await ctx.audioWorklet.addModule("dsp-worklet.js");
   const node = new AudioWorkletNode(ctx, "mixforge-processor", { outputChannelCount: [2], processorOptions: { wasm } });
   node.connect(ctx.destination);
+  // Fan-out for the mix recorder (web/recorder.mjs, S513): a MediaStreamAudioDestinationNode
+  // tapped straight off the same worklet output that reaches the speakers, so a recording can
+  // never drift from what the DJ actually heard.
+  const recordDest = ctx.createMediaStreamDestination();
+  node.connect(recordDest);
   node.port.onmessage = (ev) => {
     const m = ev.data;
     if (m.type === "state") onState(m.state);
@@ -18,5 +23,5 @@ export async function bootEngine({ onState, onCaptured, onMidiEvent }) {
     else if (m.type === "midiEvent") onMidiEvent(m.event);
   };
   function send(m, transfer) { node.port.postMessage(m, transfer || []); }
-  return { ctx, dsp, node, send };
+  return { ctx, dsp, node, send, recordStream: recordDest.stream };
 }

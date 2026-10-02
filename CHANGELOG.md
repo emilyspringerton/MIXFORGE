@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-10-02
+
+- cookie-exporter extension now released from IDUNA CI (IDUNA/extensions/mixforge-cookie-exporter); README pointer added (sess-20260923-1030-4a526255)
+
+
 ## 2026-09-29
 - S513: "Save to IDUNA" is now fully live end to end. Founder ran `sudo-queue/96-mixforge-api-
   proxy-nginx.sh`, deploying the `/api/` same-origin proxy to IDUNA. Re-testing against

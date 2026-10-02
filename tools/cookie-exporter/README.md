@@ -1,3 +1,5 @@
+> **Moved/released from IDUNA** (2026-10-02): the maintained, CI-released copy is `IDUNA/extensions/mixforge-cookie-exporter` (GitHub Releases `ext-mixforge-cookie-exporter-v*`). This copy is the original and is no longer the one to edit.
+
 # MIXFORGE Cookie Exporter
 
 A small, real Chrome extension (Manifest V3) — reads your own `youtube.com` session cookies via

@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-10-15
+
+- **PELLEGRINO dogfood (kanban #637):** `web/dj.html` and `web/multiplayer.html` opened as files in PELLEGRINO (PARENA browser). What rendered wrong was fixed in PELLEGRINO (`9b50f15`..`532aadf`): a `<script>` body full of `</div>` leaked onto the page, paragraphs broke mid-word, and UTF-8 `±` showed as `?`. What works there today: the static chrome (header, toolbar, MIDI sampler card, controls) lays out correctly. What does not: the four decks, pads and waveforms are built by JavaScript at load, and PELLEGRINO has no JS yet (PARENA `stdlib/v16` exists but is not wired in), so those regions are empty. Next step toward "MIXFORGE functioning in PELLEGRINO" is wiring V16 + a DOM, not more CSS.
+
 ## 2026-10-02
 
 - cookie-exporter extension now released from IDUNA CI (IDUNA/extensions/mixforge-cookie-exporter); README pointer added (sess-20260923-1030-4a526255)

@@ -120,7 +120,9 @@ export async function realDownload(url, destDir) {
   if (process.env.MIXFORGE_YTDLP_COOKIES && existsSync(process.env.MIXFORGE_YTDLP_COOKIES)) {
     args.push("--cookies", process.env.MIXFORGE_YTDLP_COOKIES);
   }
-  args.push("--print", "after_move:filepath", "-o", template, url);
+  // MIXFORGE_META is printed first (title + uploader) so the single-player deck can show what it
+  // loaded; the file path stays the LAST stdout line, which is what the parser below keys on.
+  args.push("--print", "before_dl:MIXFORGE_META\t%(title)s\t%(uploader)s", "--print", "after_move:filepath", "-o", template, url);
   return new Promise((resolve) => {
     execFile(ytdlp, args, { timeout: 120000, maxBuffer: 16 * 1024 * 1024 }, (err, stdout, stderr) => {
       if (err) {
@@ -128,7 +130,10 @@ export async function realDownload(url, destDir) {
         resolve({ ok: false, error: reason });
         return;
       }
-      let filePath = stdout.trim().split("\n").filter(Boolean).pop();
+      const lines = stdout.trim().split("\n").filter(Boolean);
+      const metaLine = lines.find((l) => l.startsWith("MIXFORGE_META\t"));
+      const [, title = "", artist = ""] = metaLine ? metaLine.split("\t") : [];
+      let filePath = lines.filter((l) => !l.startsWith("MIXFORGE_META\t")).pop();
       if (!filePath || !existsSync(filePath)) {
         const found = readdirSync(destDir).find((f) => f.startsWith(id));
         filePath = found ? path.join(destDir, found) : null;
@@ -137,9 +142,15 @@ export async function realDownload(url, destDir) {
         resolve({ ok: false, error: "yt-dlp reported success but produced no findable output file" });
         return;
       }
-      resolve({ ok: true, path: filePath });
+      resolve({ ok: true, path: filePath, title: cleanMeta(title), artist: cleanMeta(artist) });
     });
   });
+}
+
+// cleanMeta -- yt-dlp prints "NA" for a field it doesn't have; keep titles short enough for a deck card.
+function cleanMeta(v) {
+  const t = String(v || "").trim();
+  return t === "NA" ? "" : t.slice(0, 120);
 }
 
 export class Room {
@@ -237,11 +248,41 @@ export function broadcast(room, msg) {
 // room.leave()/advanceTurn(), no separate cleanup path to keep in sync.
 const HEARTBEAT_MS = 30000;
 
+// handleSolo -- single-player: fetch_track {reqId, url} downloads the audio for this one client and
+// answers track_ready {reqId, url, title, artist} (url is under /room-cache/, served by nginx), or
+// track_failed. Same URL allowlist and one-retry policy as the room's queue_song; every message
+// carries the reqId so a page can have several songs in flight. ping/pong is kept so a page can
+// tell the socket is alive.
+function handleSolo(ws, download) {
+  const send = (m) => { if (ws.readyState === ws.OPEN) ws.send(JSON.stringify(m)); };
+  ws.on("message", (raw) => {
+    let msg;
+    try { msg = JSON.parse(raw.toString()); } catch { return; }
+    if (msg.type === "ping") { send({ type: "pong", t0: msg.t0, serverTime: Date.now() }); return; }
+    if (msg.type !== "fetch_track") return;
+    const reqId = msg.reqId;
+    if (!safeYoutubeUrl(msg.url)) { send({ type: "track_failed", reqId, error: "not a real youtube.com/youtu.be URL" }); return; }
+    send({ type: "fetching", reqId });
+    downloadWithRetry(download, msg.url, CACHE_DIR, (info) => send({ type: "download_retry", reqId, ...info }))
+      .then((res) => {
+        if (!res.ok) { send({ type: "track_failed", reqId, error: res.error }); return; }
+        send({ type: "track_ready", reqId, url: `/room-cache/${path.basename(res.path)}`, title: res.title || "", artist: res.artist || "" });
+      })
+      .catch((err) => send({ type: "track_failed", reqId, error: String((err && err.message) || err) }));
+  });
+}
+
 export function startServer(port, host = "127.0.0.1", download = realDownload, heartbeatMs = HEARTBEAT_MS) {
   const room = new Room();
   const wss = new WebSocketServer({ port, host });
 
-  wss.on("connection", (ws) => {
+  wss.on("connection", (ws, req) => {
+    // A solo connection (single-player dj.html: /ws?solo=1) is not a DJ in the room -- no seat, no
+    // turn, nothing broadcast to or from the room. It only asks the server to fetch audio for it.
+    if (new URL(req.url || "/", "http://x").searchParams.get("solo") === "1") {
+      handleSolo(ws, download);
+      return;
+    }
     const id = crypto.randomUUID();
     const seat = room.join(id, ws);
     if (seat === -1) {

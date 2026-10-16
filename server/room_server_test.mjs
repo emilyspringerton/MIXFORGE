@@ -273,4 +273,43 @@ assert(s4.room.occupiedCount() === 1, `dead peer's seat was reaped (occupiedCoun
 
 e.close(); f.close(); s4.wss.close();
 console.log("room_server heartbeat fix: PASS (a truly dead peer's seat is reaped, freeing it and handing off currentTurn if needed)");
+
+// ---- solo connections (single-player dj.html: /ws?solo=1) -------------------------------------
+{
+const PORT5 = 8978;
+async function stubSolo(url) {
+  if (url.includes("boom")) return { ok: false, error: "ERROR: Sign in to confirm you're not a bot" };
+  return { ok: true, path: "/x/y/abc.webm", title: "Night Drive", artist: "Pale Harbor" };
+}
+const s5 = startServer(PORT5, "127.0.0.1", stubSolo, 60000);
+const solo = await new Promise((resolve) => {
+  const w = new WebSocket(`ws://127.0.0.1:${PORT5}/ws?solo=1`);
+  attachQueue(w);
+  w.once("open", () => resolve(w));
+});
+await new Promise((r) => setTimeout(r, 100));
+assert(s5.room.occupiedCount() === 0, "a solo connection takes no seat");
+assert(solo.__queue.length === 0, "a solo connection is sent no joined/room_state");
+solo.send(JSON.stringify({ type: "fetch_track", reqId: 7, url: "https://youtu.be/abc123" }));
+const ack = await nextMessageOfType(solo, "fetching");
+assert(ack.reqId === 7, "solo fetch is acknowledged with its reqId");
+const ready = await nextMessageOfType(solo, "track_ready");
+assert(ready.reqId === 7 && ready.url === "/room-cache/abc.webm" && ready.title === "Night Drive" && ready.artist === "Pale Harbor", "solo fetch answers track_ready with url + title + artist");
+solo.send(JSON.stringify({ type: "fetch_track", reqId: 8, url: "https://evil.example/x" }));
+const bad = await nextMessageOfType(solo, "track_failed");
+assert(bad.reqId === 8 && /youtube/.test(bad.error), "a non-YouTube URL is refused with its reqId");
+solo.send(JSON.stringify({ type: "fetch_track", reqId: 9, url: "https://youtu.be/boom" }));
+const retry = await nextMessageOfType(solo, "download_retry");
+assert(retry.reqId === 9 && retry.retrying === true, "a failed download is retried once and reported with its reqId");
+const failed = await nextMessageOfType(solo, "track_failed");
+assert(failed.reqId === 9 && /bot/.test(failed.error), "the real failure reaches the solo client");
+solo.send(JSON.stringify({ type: "ping", t0: 5 }));
+const pong = await nextMessageOfType(solo, "pong");
+assert(pong.t0 === 5 && typeof pong.serverTime === "number", "solo ping/pong works");
+const seated = await connect(PORT5);
+await nextMessageOfType(seated, "joined");
+assert(s5.room.occupiedCount() === 1, "a real room client still gets seat 0 alongside a solo client");
+solo.close(); seated.close(); s5.wss.close();
+}
+console.log("room_server solo fetch: PASS (single-player fetches audio without a seat, a turn, or any room traffic)");
 process.exit(0);

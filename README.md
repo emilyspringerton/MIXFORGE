@@ -7,7 +7,12 @@ See `NORTHSTAR.md` for the full plan and history.
 
 ## What works today
 
-**4-deck DJ mixer + MIDI sampler: `web/dj.html`** (working, browser)
+**4-deck DJ mixer + MIDI sampler: `web/dj.html`** (working, browser). Redesigned 2026-10-16 as a
+queue-driven single-player rig: paste a YouTube link and the song becomes its own deck (two decks to
+start, up to four). *Load now* + a deck picker overrides a specific deck. The playing deck blends
+(4 s, equal-power) or cuts into the next, then disappears; a lone deck loops. YouTube needs the
+room server (`/ws?solo=1`); files and demo loops work without it. Tested headlessly
+(`scripts/dj_browser_test.mjs`, yt-dlp stubbed); real YouTube downloads not exercised in that test.
 
 - **4 decks**: load any audio file the browser can decode (e.g. the tracks `mixforge import`
   downloads), or a built-in synthesized demo loop (drums/bass/chords/arp, 124 BPM). Play/pause,

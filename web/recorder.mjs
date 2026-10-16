@@ -61,7 +61,7 @@ export function mountRecorder(container, stream, log = () => {}) {
     const s = iduna.currentSession();
     accountEl.innerHTML = s
       ? `signed in as <b>${esc(s.displayName || s.playerId)}</b> · <a href="#" id="rf-mymixes">my mixes</a> · <a href="#" id="rf-signout">sign out</a>`
-      : `<a href="#" id="rf-signin">Sign in to IDUNA</a> to save mixes to your account`;
+      : `<a href="#" id="rf-signin" title="Sign in to save mixes to your account">Sign in to IDUNA</a>`;
     const signinLink = accountEl.querySelector("#rf-signin");
     if (signinLink) signinLink.addEventListener("click", (e) => { e.preventDefault(); iduna.startSignIn().then(renderAccount); });
     const signoutLink = accountEl.querySelector("#rf-signout");

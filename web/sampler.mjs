@@ -5,7 +5,10 @@ const KEYS = "1234qwerasdfzxcv";
 const NOTE_NAMES = ["C","C#","D","D#","E","F","F#","G","G#","A","A#","B"];
 export const noteName = (n) => NOTE_NAMES[n % 12] + (Math.floor(n / 12) - 1);
 
-export function createSampler({ send, log, deckState, PADS, deckLabels }) {
+// deckLabels (multiplayer.html): the "from" menu is deck 1..n by index. sources + resolveDeck (the
+// single-player page): the menu is [{value,label}] and resolveDeck(value) turns the choice into an
+// engine deck index (-1 = the master mix) or null when there is nothing to sample.
+export function createSampler({ send, log, deckState, PADS, deckLabels, sources, resolveDeck }) {
   const $ = (s, el = document) => el.querySelector(s);
   const padsEl = $("#pads");
   const padNames = Array(PADS).fill("");
@@ -17,7 +20,7 @@ export function createSampler({ send, log, deckState, PADS, deckLabels }) {
       const el = document.createElement("div");
       el.className = "pad";
       el.dataset.pad = j;
-      el.innerHTML = `<b>${j + 1}</b><span class="pn"></span><kbd>${KEYS[j].toUpperCase()} · ${noteName(36 + j)}</kbd>`;
+      el.innerHTML = `<b>${j + 1}</b><span class="pw"><span class="pn"></span><kbd>${KEYS[j].toUpperCase()} · ${noteName(36 + j)}</kbd></span>`;
       const down = (e) => { e.preventDefault(); noteOn(36 + j, 110); };
       const up = () => noteOff(36 + j);
       el.addEventListener("pointerdown", down);
@@ -31,15 +34,21 @@ export function createSampler({ send, log, deckState, PADS, deckLabels }) {
   }
 
   const capDeckSel = $("#capDeck");
-  capDeckSel.innerHTML = deckLabels.map((label, i) => `<option value="${i}">${label}</option>`).join("");
+  const setSources = (list) => {
+    const prev = capDeckSel.value;
+    capDeckSel.innerHTML = list.map((o) => `<option value="${o.value}"${o.disabled ? " disabled" : ""}>${o.label}</option>`).join("");
+    if (list.some((o) => String(o.value) === prev && !o.disabled)) capDeckSel.value = prev;
+  };
+  setSources(sources || deckLabels.map((label, i) => ({ value: i, label })));
 
   $("#capPad").value = 5;
   $("#chromPad").value = chromPad;
   $("#chromPad").addEventListener("change", (e) => { chromPad = +e.target.value; send({ type: "global", key: "chromaticPad", value: chromPad }); renderPads(); });
   $("#samplerGain").addEventListener("input", (e) => { e.target.nextElementSibling.textContent = (+e.target.value).toFixed(2); send({ type: "global", key: "samplerGain", value: +e.target.value }); });
   $("#capGo").addEventListener("click", () => {
-    const deck = +capDeckSel.value;
-    if (!deckState[deck].bpm) log(`sample: deck ${deck + 1} has no BPM set — capture-frames falls back to 120`);
+    const deck = resolveDeck ? resolveDeck(capDeckSel.value) : +capDeckSel.value;
+    if (deck === null) { log("sample: nothing loaded to sample yet"); return; }
+    if (deck >= 0 && !deckState[deck].bpm) log(`sample: deck ${deck + 1} has no BPM set — capture-frames falls back to 120`);
     send({ type: "capture", j: +$("#capPad").value, deck, beats: +$("#capBeats").value });
   });
 
@@ -74,5 +83,5 @@ export function createSampler({ send, log, deckState, PADS, deckLabels }) {
   });
 
   renderPads();
-  return { renderPads, flashPad, noteOn, noteOff, getChromPad: () => chromPad };
+  return { renderPads, flashPad, noteOn, noteOff, setSources, getChromPad: () => chromPad };
 }

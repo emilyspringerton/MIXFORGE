@@ -12,6 +12,7 @@
 export const DECKS = 4;
 export const PADS = 16;
 export const VOICES = 16;
+const RING_SECS = 12;
 export const ASSIGN_A = 0, ASSIGN_THRU = 1, ASSIGN_B = 2;
 
 // Instantiate dsp.wasm synchronously (works in an AudioWorklet, where top-level await/fetch
@@ -29,6 +30,11 @@ function makeDeck() {
     trim: 1, fader: 0.8, pan: 0, filter: 0,
     mute: false, solo: false, assign: ASSIGN_THRU,
     lpL: 0, lpR: 0, peak: 0,
+    // ticket: a deck in the play chain carries a monotonically increasing ticket; the chain is the
+    // loaded decks sorted by it (head = lowest = "now playing"). null = not in the chain, which is
+    // how multiplayer.html's free-standing decks keep their old always-loop behaviour.
+    ticket: null,
+    blendGain: 1, // hand-off blend multiplier, driven per block by MixEngine.updateHandoff
   };
 }
 
@@ -62,12 +68,113 @@ export class MixEngine {
     this.masterPeakR = 0;
     this.midiLog = [];
     this.nextVoice = 0;
+    // Hand-off between chained decks: "blend" overlaps the tail of the head deck with the start of
+    // the next one (equal-power, over handoffSecs); "cut" starts the next deck the moment the head ends.
+    this.handoffMode = "blend";
+    this.handoffSecs = 4;
+    this.blend = null; // { from, to, total, elapsed } while a blend is in flight
+    this.events = []; // { kind: "blend" | "handoff", from, to } drained by snapshot()
+    // Rolling copy of the last RING_SECS of master output, so a pad can sample "Master".
+    this.ringL = new Float32Array(Math.ceil(sampleRate * RING_SECS));
+    this.ringR = new Float32Array(this.ringL.length);
+    this.ringPos = 0;
+    this.ringFilled = 0;
   }
 
-  loadDeck(i, L, R, srcRate, name = "") {
+  loadDeck(i, L, R, srcRate, name = "", ticket) {
     const d = this.decks[i];
     d.L = L; d.R = R || L; d.len = L.length; d.srcRate = srcRate; d.name = name;
-    d.pos = 0; d.lpL = 0; d.lpR = 0;
+    d.pos = 0; d.lpL = 0; d.lpR = 0; d.blendGain = 1;
+    if (ticket !== undefined) d.ticket = ticket;
+  }
+
+  // clearDeck -- empty a deck and take it out of the chain (a removed or finished deck).
+  clearDeck(i) {
+    const d = this.decks[i];
+    d.L = d.R = null; d.len = 0; d.name = ""; d.pos = 0;
+    d.playing = false; d.ticket = null; d.blendGain = 1; d.peak = 0;
+  }
+
+  // chainOrder -- engine deck indices in play order, head ("now playing") first.
+  chainOrder() {
+    const out = [];
+    for (let i = 0; i < DECKS; i++) if (this.decks[i].ticket !== null && this.decks[i].L) out.push(i);
+    return out.sort((a, b) => this.decks[a].ticket - this.decks[b].ticket);
+  }
+
+  startPlay(i) {
+    const d = this.decks[i];
+    if (!d.playing) { d.pos = 0; d.playing = true; }
+  }
+
+  startBlend(from, to, secs) {
+    this.blend = { from, to, total: Math.max(1, Math.round(secs * this.sampleRate)), elapsed: 0 };
+    // Set the t=0 gains now: updateHandoff only ramps from the next block, and the incoming deck
+    // would otherwise play one block at full level (an audible click on the way in).
+    this.decks[from].blendGain = this.dsp.quarter_cos(0);
+    this.decks[to].blendGain = this.dsp.quarter_cos(1);
+    this.startPlay(to);
+    this.events.push({ kind: "blend", from, to, secs });
+  }
+
+  // finishHandoff -- the outgoing deck is done: it empties (the UI removes it), the incoming deck
+  // becomes the head at full level.
+  finishHandoff(from, to) {
+    this.clearDeck(from);
+    const t = this.decks[to];
+    t.blendGain = 1;
+    this.startPlay(to);
+    this.blend = null;
+    this.events.push({ kind: "handoff", from, to });
+  }
+
+  // skip -- hand off to the next deck now, in the current style.
+  skip() {
+    const chain = this.chainOrder();
+    if (this.blend) { this.finishHandoff(this.blend.from, this.blend.to); return; }
+    if (chain.length < 2) return;
+    const head = this.decks[chain[0]];
+    if (this.handoffMode === "blend" && head.playing) {
+      const remain = (head.len - head.pos) / (head.srcRate * this.dsp.tempo_rate(head.pitch, head.range));
+      this.startBlend(chain[0], chain[1], Math.min(this.handoffSecs, Math.max(remain, 0.05)));
+    } else this.finishHandoff(chain[0], chain[1]);
+  }
+
+  // onTrackEnd -- a chained, non-looping deck ran off its end (called from the sample loop).
+  onTrackEnd(i) {
+    const chain = this.chainOrder();
+    if (this.blend && this.blend.from === i) { this.finishHandoff(i, this.blend.to); return; }
+    if (chain[0] === i && chain.length > 1 && !this.blend) this.finishHandoff(i, chain[1]);
+  }
+
+  // updateHandoff -- once per block: keep the chain's loop flags right, advance an in-flight blend,
+  // and start one when the head is within handoffSecs of its end. Gains are equal-power, from the
+  // PARENA quarter-cos kernel (the same curve the crossfader uses).
+  updateHandoff(n) {
+    const x = this.dsp;
+    const chain = this.chainOrder();
+    for (const i of chain) this.decks[i].loop = chain.length === 1;
+    if (this.blend) {
+      const b = this.blend;
+      if (!chain.includes(b.from) || !chain.includes(b.to)) {
+        for (const i of [b.from, b.to]) this.decks[i].blendGain = 1;
+        this.blend = null; // one side was removed mid-blend: the survivor goes back to full level
+      } else if (b.elapsed >= b.total) {
+        this.finishHandoff(b.from, b.to);
+      } else {
+        const t = b.elapsed / b.total;
+        this.decks[b.from].blendGain = x.quarter_cos(t);
+        this.decks[b.to].blendGain = x.quarter_cos(1 - t);
+        b.elapsed += n;
+      }
+      return;
+    }
+    if (chain.length > 1 && this.handoffMode === "blend") {
+      const h = this.decks[chain[0]];
+      if (!h.playing) return;
+      const remain = (h.len - h.pos) / (h.srcRate * x.tempo_rate(h.pitch, h.range));
+      if (remain <= this.handoffSecs) this.startBlend(chain[0], chain[1], Math.max(remain, 0.05));
+    }
   }
 
   loadPad(j, L, R, srcRate, opts = {}) {
@@ -82,6 +189,7 @@ export class MixEngine {
   // capturePad -- beat-synced MIDI sampling off a deck: grab `beats` beats starting at the deck's
   // playhead into pad j (length from sampler.prn's capture-frames). Returns the frame count.
   capturePad(j, deckIndex, beats) {
+    if (deckIndex < 0) return this.captureMaster(j, beats);
     const d = this.decks[deckIndex];
     if (!d.L || d.len === 0) return 0;
     const frames = Math.min(
@@ -99,6 +207,24 @@ export class MixEngine {
     this.loadPad(j, L, R, d.srcRate, {
       name: `${d.name || "deck " + (deckIndex + 1)} x${beats}`,
       root: 60, oneShot: true, attack: 0.002, decay: 0, sustain: 1, release: 0.02,
+    });
+    return frames;
+  }
+
+  // captureMaster -- the most recent `beats` of the master mix (the future can't be sampled), at the
+  // head deck's tempo. Same return contract as capturePad.
+  captureMaster(j, beats) {
+    const head = this.chainOrder()[0];
+    const bpm = head !== undefined ? this.decks[head].bpm : 0;
+    const want = Math.floor(this.dsp.capture_frames(beats, bpm, this.sampleRate));
+    const frames = Math.min(want, this.ringFilled);
+    if (frames <= 0) return 0;
+    const L = new Float32Array(frames), R = new Float32Array(frames);
+    const size = this.ringL.length;
+    let src = (this.ringPos - frames + size) % size;
+    for (let k = 0; k < frames; k++) { L[k] = this.ringL[src]; R[k] = this.ringR[src]; src = (src + 1) % size; }
+    this.loadPad(j, L, R, this.sampleRate, {
+      name: `master x${beats}`, root: 60, oneShot: true, attack: 0.002, decay: 0, sustain: 1, release: 0.02,
     });
     return frames;
   }
@@ -165,13 +291,14 @@ export class MixEngine {
   process(outL, outR, n) {
     const x = this.dsp;
     const decks = this.decks;
+    this.updateHandoff(n);
     const anySolo = decks.some((d) => d.solo);
     const gainL = [0, 0, 0, 0], gainR = [0, 0, 0, 0], step = [0, 0, 0, 0];
     for (let i = 0; i < DECKS; i++) {
       const d = decks[i];
       const g = x.channel_gain(d.trim, d.fader, d.mute, d.solo, anySolo, d.assign, this.crossfader);
-      gainL[i] = g * x.pan_left(d.pan);
-      gainR[i] = g * x.pan_right(d.pan);
+      gainL[i] = g * d.blendGain * x.pan_left(d.pan);
+      gainR[i] = g * d.blendGain * x.pan_right(d.pan);
       step[i] = (d.srcRate / this.sampleRate) * x.tempo_rate(d.pitch, d.range);
     }
     const bendRate = x.bend_rate(this.bend);
@@ -198,7 +325,11 @@ export class MixEngine {
         if (a > peaks[i]) peaks[i] = a;
         d.pos += step[i];
         if (d.pos >= d.len) {
-          if (d.loop) d.pos -= d.len; else { d.pos = d.len - 1; d.playing = false; }
+          if (d.loop) d.pos -= d.len;
+          else {
+            d.pos = d.len - 1; d.playing = false;
+            if (d.ticket !== null) this.onTrackEnd(i);
+          }
         }
       }
 
@@ -226,11 +357,14 @@ export class MixEngine {
       const oL = x.mix4(chL[0] + vL, chL[1], chL[2], chL[3], this.master);
       const oR = x.mix4(chR[0] + vR, chR[1], chR[2], chR[3], this.master);
       outL[k] = oL; outR[k] = oR;
+      this.ringL[this.ringPos] = oL; this.ringR[this.ringPos] = oR;
+      if (++this.ringPos === this.ringL.length) this.ringPos = 0;
       const aL = Math.abs(oL), aR = Math.abs(oR);
       if (aL > mpL) mpL = aL;
       if (aR > mpR) mpR = aR;
     }
 
+    this.ringFilled = Math.min(this.ringL.length, this.ringFilled + n);
     const fall = n / sr * 1.5; // ~1.5 full-scale per second
     for (let i = 0; i < DECKS; i++) decks[i].peak = x.level_meter_decay(decks[i].peak, peaks[i], fall);
     this.masterPeakL = x.level_meter_decay(this.masterPeakL, mpL, fall);
@@ -242,8 +376,11 @@ export class MixEngine {
     return {
       decks: this.decks.map((d) => ({
         pos: d.pos, len: d.len, srcRate: d.srcRate, playing: d.playing, peak: d.peak,
-        rate: this.dsp.tempo_rate(d.pitch, d.range),
+        rate: this.dsp.tempo_rate(d.pitch, d.range), ticket: d.ticket,
       })),
+      order: this.chainOrder(),
+      blend: this.blend ? { from: this.blend.from, to: this.blend.to, t: Math.min(1, this.blend.elapsed / this.blend.total) } : null,
+      events: this.events.splice(0),
       voices: this.voices.filter((v) => v.active).length,
       masterPeakL: this.masterPeakL, masterPeakR: this.masterPeakR,
       pads: this.pads.map((p) => ({ len: p.len, name: p.name })),

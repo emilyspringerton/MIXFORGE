@@ -16,7 +16,9 @@ class MixforgeProcessor extends AudioWorkletProcessor {
   onMessage(m) {
     const e = this.engine;
     switch (m.type) {
-      case "deck": e.loadDeck(m.i, m.L, m.R, m.rate, m.name); if (m.bpm) e.setDeck(m.i, "bpm", m.bpm); break;
+      case "deck": e.loadDeck(m.i, m.L, m.R, m.rate, m.name, m.ticket); if (m.bpm) e.setDeck(m.i, "bpm", m.bpm); break;
+      case "clearDeck": e.clearDeck(m.i); break;
+      case "skip": e.skip(); break;
       case "deckParam": e.setDeck(m.i, m.key, m.value); break;
       case "seek": e.decks[m.i].pos = m.pos; break;
       case "pad": e.loadPad(m.j, m.L, m.R, m.rate, m.opts || {}); break;

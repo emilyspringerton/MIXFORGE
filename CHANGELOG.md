@@ -177,3 +177,6 @@
   BPM detection has no PARENA story anywhere in this monorepo yet, `aubio` (FFI-bound) is the
   leading candidate. 6-phase delivery plan. Registered as `MIXFORGE-NORTH` in
   `EMILY/context/golden-docs-index.md`. (sess-20260902-2008-ed50169e)
+
+## 2026-10-17
+- **Autodeploy:** added `.github/workflows/deploy.yml` + `scripts/build-images.sh` (+ `ops/docker/{web,room}`): every push to `main` runs the web tests, Cloud-Builds `mixforge-web` then `mixforge-room` tagged with the short SHA, and the in-cluster gitops-autodeploy cron rolls it out (it follows the newest `mixforge-room` tag). Until now images were built by hand, so single-player redesign commits never went live.

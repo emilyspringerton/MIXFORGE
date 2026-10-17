@@ -1,0 +1,46 @@
+name: Build and push images
+
+# K8S-CD-01 (same pattern as WOTAN/IDUNA deploy.yml): build the mixforge-web + mixforge-room images and push them to
+# Artifact Registry on every push to main, auth via Workload Identity (no stored key; EMILY/gitops/CI_SETUP.md).
+# The in-cluster gitops-autodeploy CronJob notices the newest mixforge-room tag, bumps MIXFORGE_TAG in
+# EMILY/gitops/tags.env and gitops-sync applies it -- this workflow never talks to the cluster.
+on:
+  push:
+    branches: [main]
+    paths-ignore: ['**.md', 'legacy.txt', '.github/workflows/cookie-exporter-ci.yml']
+  workflow_dispatch: {}
+
+concurrency:
+  group: mixforge-deploy-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Test (web logic)
+        run: |
+          for t in web/deckmodel_test.mjs web/handoff_test.mjs web/solo_client_test.mjs web/dsp_test.mjs; do
+            echo "== $t"; node "$t"
+          done
+
+      - name: Auth to GCP (Workload Identity, no stored key)
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER || 'projects/532442865445/locations/global/workloadIdentityPools/github/providers/github' }}
+          service_account: ${{ vars.GCP_CI_SERVICE_ACCOUNT || 'github-ci@project-d24a71e9-2daf-4b2d-917.iam.gserviceaccount.com' }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - name: Build + push
+        run: scripts/build-images.sh "$(git rev-parse --short HEAD)"

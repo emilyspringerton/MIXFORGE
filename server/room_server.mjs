@@ -164,6 +164,9 @@ export class Room {
     // seeking to the correct mid-song position instead of restarting from 0 -- the "no mid-song
     // late join" gap this comment used to name is fixed, not just documented, as of this commit.
     this.nowPlaying = null;
+    this.onAir = -1; // seat currently streaming its master mix, or -1
+    this.airInfo = null;
+    this.airWindow = { start: 0, bytes: 0 };
   }
 
   occupiedCount() {
@@ -227,8 +230,28 @@ export class Room {
       seats: this.seats.map((s) => (s ? { id: s.id } : null)),
       currentTurn: this.currentTurn,
       nowPlaying: this.nowPlaying || null,
+      onAir: this.onAir,
     };
   }
+}
+
+// Live master-mix stream ("on air"): at most one seat broadcasts its master output at a time; the server
+// never decodes anything, it relays that seat's binary frames verbatim to every OTHER seat. Frame wire format
+// is defined (and tested) in web/airstream.mjs; the server only enforces size and rate so a seat can't flood the room.
+export const AIR_MAX_FRAME_BYTES = 16 * 1024;
+export const AIR_MAX_BYTES_PER_SEC = 128 * 1024; // sustained ceiling; a 2x burst is allowed within a one-second window
+
+export function relayAir(room, senderSeat, data, now = Date.now()) {
+  if (senderSeat < 0 || room.onAir !== senderSeat) return false;
+  if (data.length > AIR_MAX_FRAME_BYTES) return false;
+  const w = room.airWindow;
+  if (now - w.start >= 1000) { w.start = now; w.bytes = 0; }
+  if (w.bytes + data.length > AIR_MAX_BYTES_PER_SEC * 2) return false;
+  w.bytes += data.length;
+  room.seats.forEach((st, i) => {
+    if (st && i !== senderSeat && st.ws.readyState === st.ws.OPEN) st.ws.send(data, { binary: true });
+  });
+  return true;
 }
 
 export function broadcast(room, msg) {
@@ -302,16 +325,29 @@ export function startServer(port, host = "127.0.0.1", download = realDownload, h
     // uses below -- the client's existing handlePlay() now computes how far into the track "now"
     // actually is (see multiplayer.html) instead of always restarting from position 0.
     if (room.nowPlaying) ws.send(JSON.stringify({ type: "play", ...room.nowPlaying }));
+    if (room.onAir !== -1) ws.send(JSON.stringify({ type: "onair_started", seat: room.onAir, ...room.airInfo }));
     broadcast(room, room.state());
 
-    ws.on("message", (raw) => {
+    ws.on("message", (raw, isBinary) => {
+      if (isBinary) { relayAir(room, room.seatOf(id), raw); return; }
       let msg;
       try {
         msg = JSON.parse(raw.toString());
       } catch {
         return; // real, honest "ignore malformed input" -- not this v0's job to validate JSON shape further
       }
-      if (msg.type === "queue_song") {
+      if (msg.type === "go_on_air") {
+        const s = room.seatOf(id);
+        if (room.onAir !== -1 && room.onAir !== s) { ws.send(JSON.stringify({ type: "onair_denied", onAir: room.onAir })); return; }
+        room.onAir = s;
+        room.airWindow = { start: 0, bytes: 0 };
+        // The sender describes its own frames ("opus" | "pcm16"); listeners need that before frame 1.
+        room.airInfo = { codec: msg.codec === "opus" ? "opus" : "pcm16", sampleRate: Number(msg.sampleRate) || 48000, channels: msg.channels === 1 ? 1 : 2 };
+        broadcast(room, { type: "onair_started", seat: s, ...room.airInfo });
+        broadcast(room, room.state());
+      } else if (msg.type === "off_air") {
+        if (room.onAir === room.seatOf(id)) { room.onAir = -1; broadcast(room, { type: "onair_stopped" }); broadcast(room, room.state()); }
+      } else if (msg.type === "queue_song") {
         const senderSeat = room.seatOf(id);
         if (senderSeat !== room.currentTurn) return; // only the seated DJ whose turn it is may queue
         if (!safeYoutubeUrl(msg.url)) {
@@ -353,6 +389,7 @@ export function startServer(port, host = "127.0.0.1", download = realDownload, h
 
     ws.on("close", () => {
       const vacatedSeat = room.leave(id);
+      if (vacatedSeat !== -1 && vacatedSeat === room.onAir) { room.onAir = -1; broadcast(room, { type: "onair_stopped" }); }
       // Real, found-live fix: if the DJ whose turn it currently is disconnects without queuing,
       // nothing else ever calls advanceTurn() (only a successful queue_song from the current-turn
       // seat does) -- the room would get stuck forever, since every other seat's queue attempt is

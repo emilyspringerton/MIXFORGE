@@ -71,6 +71,19 @@ autocorrelation, pure JS, labeled `~123 BPM (est.)`, not the real aubio-FFI-boun
 NORTHSTAR's own Phase 3 still names as future, separate work — no key detection at all, same
 reason).
 
+**On air (live master-mix stream)** — any seated DJ can press *Go on air* in the room: their master output (the same
+tap the recorder uses) is encoded and streamed over the room WebSocket; everyone else hears it on a separate
+"On-air volume" bus, so nobody's decks are overwritten. One DJ on air at a time; the server only relays binary frames
+(size- and rate-limited) and announces `onair_started`/`onair_stopped`. Codec is Opus (20 ms packets, 128 kbit/s) via
+WebCodecs `AudioEncoder`/`AudioDecoder`, falling back to 24 kHz 16-bit PCM (~770 kbit/s) where WebCodecs is missing.
+Listeners buffer ~250 ms, so expect roughly a third of a second of delay; late joiners pick the stream up mid-flight.
+Code: `web/airstream.mjs`, `web/air-tap-worklet.js`, relay in `server/room_server.mjs`. Tests: `web/airstream_test.mjs`
+(frame format, resampler, jitter scheduling), `server/room_air_test.mjs` (relay rules), and
+`scripts/room_air_browser_test.mjs` (two real Chromium tabs, Opus and PCM, checks the received audio is non-silent).
+Honest limits: only headless Chromium is verified — Firefox/Safari are untested (they'd use the PCM path or fail);
+WebSocket/TCP, so a bad network adds latency rather than dropping packets (WebRTC would fix that, not done); the
+hand-off timing in `engine.mjs` is still JS, not PARENA (the blend curves are PARENA `quarter_cos`).
+
 Real, found-live, honestly named limitation: YouTube's own bot-detection intermittently blocks
 this server's IP outright (`Sign in to confirm you're not a bot`) — confirmed live, not assumed;
 `MIXFORGE_YTDLP_COOKIES` (a Netscape-format cookies.txt path) is the wired-in escape hatch once

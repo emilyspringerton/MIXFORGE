@@ -180,3 +180,4 @@
 
 ## 2026-10-17
 - **Autodeploy:** added `.github/workflows/deploy.yml` + `scripts/build-images.sh` (+ `ops/docker/{web,room}`): every push to `main` runs the web tests, Cloud-Builds `mixforge-web` then `mixforge-room` tagged with the short SHA, and the in-cluster gitops-autodeploy cron rolls it out (it follows the newest `mixforge-room` tag). Until now images were built by hand, so single-player redesign commits never went live.
+- **Multiplayer: on-air master-mix stream.** A seated DJ streams their master mix (Opus via WebCodecs, 24 kHz PCM fallback) over the room WebSocket; the server relays it to the other seats, who hear it on their own volume bus instead of having deck contents overridden. New: `web/airstream.mjs`, `web/air-tap-worklet.js`, `go_on_air`/`off_air` + binary relay in `server/room_server.mjs`, three test files (pure, relay, two-tab Chromium). Tests also run in the deploy workflow now. README updated.

@@ -30,9 +30,15 @@ jobs:
 
       - name: Test (web logic)
         run: |
-          for t in web/deckmodel_test.mjs web/handoff_test.mjs web/solo_client_test.mjs web/dsp_test.mjs; do
+          for t in web/deckmodel_test.mjs web/handoff_test.mjs web/solo_client_test.mjs web/dsp_test.mjs web/airstream_test.mjs; do
             echo "== $t"; node "$t"
           done
+
+      - name: Test (room server)
+        run: |
+          cd server && npm ci
+          node room_server_test.mjs
+          node room_air_test.mjs
 
       - name: Auth to GCP (Workload Identity, no stored key)
         uses: google-github-actions/auth@v2

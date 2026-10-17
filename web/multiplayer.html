@@ -108,6 +108,11 @@
     <span class="note" id="turnNote"></span>
   </div>
   <div class="note" id="nowPlaying"></div>
+  <div class="row" id="airRow">
+    <button id="air" disabled title="Stream your master mix to everyone else in the room">&#9679; Go on air</button>
+    <span class="note" id="airNote">start audio to go on air</span>
+    <label id="airVolWrap" hidden style="color:var(--fg)"><span>On-air volume</span> <input type="range" id="airVol" min="0" max="1.5" step="0.01" value="1"></label>
+  </div>
 </section>
 
 <main id="main"></main>
@@ -149,6 +154,7 @@ import { createSampler, noteName } from "./sampler.mjs";
 import { createMidiHandler } from "./midi.mjs";
 import { makeKit } from "./demo_content.mjs";
 import { mountRecorder } from "./recorder.mjs";
+import { startBroadcast, createListener } from "./airstream.mjs";
 import { maybeHandlePopupReturn, consumeReturnFragment } from "./iduna.mjs";
 
 // If this exact page is the popup IDUNA's SSO login redirected back to (see iduna.mjs's own
@@ -224,9 +230,11 @@ $("#playAll").addEventListener("click", () => {
 // scoping" section for the full real architecture this implements.
 const wsProto = location.protocol === "https:" ? "wss:" : "ws:";
 const ws = new WebSocket(`${wsProto}//${location.host}/ws`);
+ws.binaryType = "arraybuffer";
 let mySeat = -1;
 let lastRoomState = null;
 let clockOffsetMs = 0; // serverTime ~= Date.now() + clockOffsetMs
+let pendingAir = null; // an onair_started that arrived before audio started
 let pendingPlay = null; // a real {url, startAtServerTimeMs} that arrived before audio started
 
 function wsSend(m) { if (ws.readyState === ws.OPEN) ws.send(JSON.stringify(m)); }
@@ -236,7 +244,11 @@ ws.onopen = () => { $("#wsStatus").textContent = "connected"; $("#wsStatus").cla
 ws.onclose = () => { $("#wsStatus").textContent = "disconnected"; $("#wsStatus").className = "bad"; $("#queue").disabled = true; };
 
 ws.onmessage = (ev) => {
+  if (typeof ev.data !== "string") { if (airListener) airListener.feed(ev.data); return; }
   const msg = JSON.parse(ev.data);
+  if (msg.type === "onair_started") { if (ctx) onAirStarted(msg); else { pendingAir = msg; airSeat = msg.seat; } }
+  else if (msg.type === "onair_stopped") onAirStopped();
+  else if (msg.type === "onair_denied") { log(`seat ${msg.onAir + 1} is already on air`); $("#air").disabled = false; }
   if (msg.type === "joined") {
     mySeat = msg.seat;
     log(`you are seat ${mySeat + 1}`);
@@ -290,7 +302,57 @@ function renderSeats() {
   const isMyTurn = mySeat >= 0 && mySeat === lastRoomState.currentTurn;
   $("#queue").disabled = !isMyTurn || ws.readyState !== ws.OPEN;
   $("#turnNote").textContent = isMyTurn ? "it's your turn!" : `waiting for seat ${lastRoomState.currentTurn + 1}`;
+  if (lastRoomState.onAir !== undefined) airSeat = lastRoomState.onAir;
+  renderAir();
 }
+
+// ---- on air: stream the master mix to the room (web/airstream.mjs) ------------------------------------------------
+// The broadcaster taps the engine's master output; listeners play it on their own gain bus, so nobody's decks are touched.
+let engineNode = null, broadcast = null, airListener = null, airSeat = -1;
+function renderAir() {
+  const btn = $("#air");
+  if (!ctx) { btn.disabled = true; return; }
+  const mine = broadcast !== null;
+  btn.textContent = mine ? "\u25A0 Stop broadcast" : "\u25CF Go on air";
+  btn.disabled = ws.readyState !== ws.OPEN || (airSeat !== -1 && !mine);
+  $("#airNote").textContent = mine ? `ON AIR (${broadcast.codec})` : airSeat !== -1 ? `seat ${airSeat + 1} is on air -- you are listening` : "off air";
+  $("#airVolWrap").hidden = !airListener;
+}
+function onAirStarted(msg) {
+  airSeat = msg.seat;
+  if (msg.seat === mySeat) { renderAir(); return; }
+  if (airListener) airListener.close();
+  if (!ctx) { renderAir(); return; }
+  try {
+    airListener = createListener(ctx, ctx.destination, msg, { onStats: (s) => { if (s.error) log(`on-air decode error: ${s.error}`); } });
+    airListener.gain.gain.value = +$("#airVol").value;
+    log(`seat ${msg.seat + 1} is on air (${msg.codec}) -- listening`);
+  } catch (e) { log(`cannot listen to the on-air stream: ${e.message}`); }
+  renderAir();
+}
+function onAirStopped() {
+  airSeat = -1;
+  if (airListener) { airListener.close(); airListener = null; log("on air ended"); }
+  if (broadcast && !stoppingBroadcast) { broadcast.stop(); broadcast = null; }
+  renderAir();
+}
+let stoppingBroadcast = false;
+window.mixforgeAir = () => ({ broadcasting: broadcast ? broadcast.codec : null, listener: airListener ? airListener.stats() : null, airSeat });
+$("#air").addEventListener("click", async () => {
+  const btn = $("#air"); btn.disabled = true;
+  if (broadcast) {
+    stoppingBroadcast = true; broadcast.stop(); broadcast = null; wsSend({ type: "off_air" }); stoppingBroadcast = false;
+    renderAir(); return;
+  }
+  try {
+    broadcast = await startBroadcast(ctx, engineNode, ws, { onStats: (s) => { if (s.error) log(`on-air encode error: ${s.error}`); else if (s.kbps !== undefined && broadcast) $("#airNote").textContent = `ON AIR (${broadcast.codec}) ${s.kbps} kbit/s`; } });
+    wsSend({ type: "go_on_air", codec: broadcast.codec, sampleRate: broadcast.sampleRate, channels: broadcast.channels });
+    log(`going on air (${broadcast.codec})`);
+  } catch (e) { log(`cannot go on air: ${e.message}`); broadcast = null; }
+  renderAir();
+});
+$("#airVol").addEventListener("input", (e) => { if (airListener) airListener.gain.gain.value = +e.target.value; });
+ws.addEventListener("close", () => { if (broadcast) { broadcast.stop(); broadcast = null; } if (airListener) { airListener.close(); airListener = null; } renderAir(); });
 
 $("#queue").addEventListener("click", () => {
   const url = $("#url").value.trim();
@@ -351,7 +413,8 @@ $("#start").addEventListener("click", async () => {
       else if (e.kind === "bend") log(`bend ${e.value}`);
     },
   });
-  ctx = engine.ctx; dsp = engine.dsp; send = engine.send;
+  ctx = engine.ctx; dsp = engine.dsp; send = engine.send; engineNode = engine.node;
+  renderAir();
   mountRecorder($("#recorder"), engine.recordStream, log);
 
   // Deck 1 stays empty until the room hands it a track; decks 2-4 get demo loops so there's
@@ -367,6 +430,7 @@ $("#start").addEventListener("click", async () => {
   $("#overlay").remove();
   midi.init();
   if (pendingPlay) { const p = pendingPlay; pendingPlay = null; handlePlay(p); }
+  if (pendingAir) { const m = pendingAir; pendingAir = null; onAirStarted(m); }
 });
 
 function updateUi(s) {
